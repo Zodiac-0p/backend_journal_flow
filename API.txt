@@ -1,0 +1,173 @@
+BASE URL
+http://127.0.0.1:8000/api/accounts/
+
+
+====================================================
+PUBLIC APIS (No Authentication Required)
+====================================================
+
+1. Check Email
+POST http://127.0.0.1:8000/api/accounts/check-email/
+
+Request Body:
+{
+  "email": "author@example.com"
+}
+
+
+2. Register New User
+POST http://127.0.0.1:8000/api/accounts/register/
+
+Request Body:
+{
+  "email": "author@example.com",
+  "username": "author1",
+  "full_name": "Author One",
+  "password": "StrongPass123",
+  "phone": "9876543210",
+  "affiliation": "ABC University",
+  "expertise": "Artificial Intelligence",
+  "want_to_be_reviewer": true
+}
+
+
+3. Login
+POST http://127.0.0.1:8000/api/accounts/login/
+
+Request Body:
+{
+  "email": "author@example.com",
+  "password": "StrongPass123"
+}
+
+
+4. Refresh Access Token
+POST http://127.0.0.1:8000/api/accounts/token/refresh/
+
+Request Body:
+{
+  "refresh": "your_refresh_token"
+}
+
+
+
+====================================================
+AUTHENTICATED APIS
+(Add Header: Authorization: Bearer <access_token>)
+====================================================
+
+5. Get Profile
+GET http://127.0.0.1:8000/api/accounts/profile/
+
+
+6. Update Complete Profile
+PATCH http://127.0.0.1:8000/api/accounts/profile/
+
+Request Body:
+{
+  "full_name": "SADIQ ALI",
+  "phone": "9876543210",
+  "affiliation": "Signal Semitech Pvt Ltd",
+  "expertise": "Machine Learning, Artificial Intelligence",
+  "job_title": "Software Developer",
+  "organization": "Signal Semitech Pvt Ltd",
+  "role_choice_id": 25,
+  "discipline_ids": [1, 5, 12],
+  "want_to_be_reviewer": true
+}
+
+
+7. Get All Role Choices
+GET http://127.0.0.1:8000/api/accounts/role-choices/
+
+
+8. Get All Disciplines
+GET http://127.0.0.1:8000/api/accounts/disciplines/
+
+
+
+====================================================
+EDITORIAL MANAGER / SUPER ADMIN APIS
+(Add Header: Authorization: Bearer <access_token>)
+====================================================
+
+9. Promote User to Reviewer
+POST http://127.0.0.1:8000/api/accounts/users/{user_id}/make-reviewer/
+
+Example:
+POST http://127.0.0.1:8000/api/accounts/users/5/make-reviewer/
+
+
+10. Create Role Choice
+POST http://127.0.0.1:8000/api/accounts/role-choices/
+
+Request Body:
+{
+  "name": "Software Developer"
+}
+
+
+11. Update Role Choice
+PUT http://127.0.0.1:8000/api/accounts/role-choices/{id}/
+
+Request Body:
+{
+  "name": "Senior Software Developer"
+}
+
+
+12. Delete Role Choice
+DELETE http://127.0.0.1:8000/api/accounts/role-choices/{id}/
+
+
+13. Create Discipline
+POST http://127.0.0.1:8000/api/accounts/disciplines/
+
+Request Body:
+{
+  "name": "Computer Science"
+}
+
+
+14. Update Discipline
+PUT http://127.0.0.1:8000/api/accounts/disciplines/{id}/
+
+Request Body:
+{
+  "name": "Advanced Computer Science"
+}
+
+
+15. Delete Discipline
+DELETE http://127.0.0.1:8000/api/accounts/disciplines/{id}/
+
+
+
+====================================================
+DJANGO ADMIN
+====================================================
+
+http://127.0.0.1:8000/admin/
+
+
+
+====================================================
+RECOMMENDED TESTING ORDER
+====================================================
+
+1. POST /api/accounts/check-email/
+2. POST /api/accounts/register/
+3. POST /api/accounts/login/
+4. GET /api/accounts/profile/
+5. GET /api/accounts/role-choices/
+6. GET /api/accounts/disciplines/
+7. PATCH /api/accounts/profile/
+8. POST /api/accounts/role-choices/
+9. POST /api/accounts/disciplines/
+10. POST /api/accounts/users/{user_id}/make-reviewer/
+
+
+Admin credentials
+
+email : sadiq.ofcl@gmail.com
+pass : Backend@123
