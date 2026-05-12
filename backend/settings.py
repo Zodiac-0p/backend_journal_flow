@@ -53,6 +53,7 @@ INSTALLED_APPS = [
 
     # Local Apps
     'accounts',
+    'journals',
     'notifications',
     'auditlog',
 ]

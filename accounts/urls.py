@@ -28,11 +28,7 @@ urlpatterns = [
     path('profile/', ProfileView.as_view(), name='profile'),
 
     # Promote any existing user to reviewer
-    path(
-        'users/<int:user_id>/make-reviewer/',
-        PromoteToReviewerView.as_view(),
-        name='make_reviewer'
-    ),
+    path('users/<int:user_id>/make-reviewer/', PromoteToReviewerView.as_view(), name='make_reviewer'),
 ]
 
 # Append router-generated endpoints
