@@ -3,6 +3,7 @@ from rest_framework import generics, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import RoleChoice, Discipline
@@ -15,6 +16,7 @@ from .serializers import (
     EmailCheckSerializer,
     RoleChoiceSerializer,
     DisciplineSerializer,
+    UserListSerializer,
 )
 
 User = get_user_model()
@@ -88,12 +90,73 @@ class ProfileView(APIView):
         serializer.save()
         return Response(UserSerializer(request.user).data)
 
+# ----------------------------------------------------------------------
+#List all users with optional role filter
+# Allowed for Editorial Manager and Super Admin
+# ---------------------------------------------------------------------
+class UserListView(ListAPIView):
+    """
+    List all users.
+    Accessible by:
+    - Editorial Manager
+    - Super Admin
 
+    Optional query parameter:
+    ?role=author
+    ?role=reviewer
+    ?role=editor
+    ?role=editorial_manager
+    ?role=super_admin
+    """
+    serializer_class = UserListSerializer
+    permission_classes = [IsEditorialManagerOrSuperAdmin]
+
+    def get_queryset(self):
+        queryset = User.objects.select_related(
+            'role_choice'
+        ).prefetch_related(
+            'disciplines'
+        ).order_by('-created_at')
+
+        role = self.request.query_params.get('role')
+
+        if role == 'author':
+            queryset = queryset.filter(
+                is_reviewer=False,
+                is_editor=False,
+                is_editorial_manager=False,
+                is_super_admin=False,
+            )
+
+        elif role == 'reviewer':
+            queryset = queryset.filter(is_reviewer=True)
+
+        elif role == 'editor':
+            queryset = queryset.filter(is_editor=True)
+
+        elif role == 'editorial_manager':
+            queryset = queryset.filter(is_editorial_manager=True)
+
+        elif role == 'super_admin':
+            queryset = queryset.filter(is_super_admin=True)
+
+        return queryset
 # ----------------------------------------------------------------------
 # Promote any user to reviewer
 # Allowed for Editorial Manager and Super Admin
 # ----------------------------------------------------------------------
 class PromoteToReviewerView(APIView):
+    """
+    Toggle reviewer status for any user.
+
+    If the user is currently:
+    - Author (is_reviewer = False) -> becomes Reviewer
+    - Reviewer (is_reviewer = True) -> becomes Author
+
+    Accessible by:
+    - Editorial Manager
+    - Super Admin
+    """
     permission_classes = [IsEditorialManagerOrSuperAdmin]
 
     def post(self, request, user_id):
@@ -105,16 +168,20 @@ class PromoteToReviewerView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        if user.is_reviewer:
-            return Response({
-                "detail": f"{user.email} is already a reviewer."
-            })
-
-        user.is_reviewer = True
+        # Toggle reviewer status
+        user.is_reviewer = not user.is_reviewer
         user.save()
 
         return Response({
-            "detail": f"{user.email} is now a reviewer."
+            "detail": (
+                f"{user.email} is now a reviewer."
+                if user.is_reviewer
+                else f"{user.email} is now an author."
+            ),
+            "user_id": user.id,
+            "email": user.email,
+            "is_reviewer": user.is_reviewer,
+            "primary_role": user.primary_role,
         })
 
 

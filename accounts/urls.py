@@ -10,6 +10,7 @@ from .views import (
     CheckEmailView,
     RoleChoiceViewSet,
     DisciplineViewSet,
+    UserListView,
 )
 
 # Router for Role Choices and Disciplines
@@ -26,7 +27,7 @@ urlpatterns = [
 
     # Profile APIs (GET and PATCH in same endpoint)
     path('profile/', ProfileView.as_view(), name='profile'),
-
+    path('users/', UserListView.as_view(), name='user_list'),
     # Promote any existing user to reviewer
     path('users/<int:user_id>/make-reviewer/', PromoteToReviewerView.as_view(), name='make_reviewer'),
 ]

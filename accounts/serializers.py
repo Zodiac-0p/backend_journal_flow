@@ -101,21 +101,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 # ----------------------------------------------------------------------
 # Profile Update Serializer
 # ----------------------------------------------------------------------
+# accounts/serializers.py
+
 class ProfileUpdateSerializer(serializers.ModelSerializer):
-    want_to_be_reviewer = serializers.BooleanField(
-        write_only=True,
-        required=False
-    )
-
-    role_choice_id = serializers.IntegerField(
-        write_only=True,
-        required=False,
-        allow_null=True
-    )
-
+    want_to_be_reviewer = serializers.BooleanField(write_only=True, required=False)
+    role_choice_id = serializers.IntegerField(required=False, allow_null=True)
     discipline_ids = serializers.ListField(
         child=serializers.IntegerField(),
-        write_only=True,
         required=False
     )
 
@@ -125,16 +117,21 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             'full_name',
             'phone',
             'affiliation',
-            'organization',
-            'job_title',
             'expertise',
+            'job_title',
+            'organization',
             'want_to_be_reviewer',
             'role_choice_id',
             'discipline_ids',
         ]
 
     def update(self, instance, validated_data):
+        # Toggle reviewer status
+        # True  -> becomes reviewer
+        # False -> reverts to author (unless they have editor/admin roles)
         want_to_be_reviewer = validated_data.pop('want_to_be_reviewer', None)
+
+        # Profile relationships
         role_choice_id = validated_data.pop('role_choice_id', None)
         discipline_ids = validated_data.pop('discipline_ids', None)
 
@@ -142,9 +139,9 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
-        # Become reviewer immediately
-        if want_to_be_reviewer is True:
-            instance.is_reviewer = True
+        # Toggle reviewer status
+        if want_to_be_reviewer is not None:
+            instance.is_reviewer = want_to_be_reviewer
 
         # Update role choice
         if role_choice_id is not None:
@@ -153,9 +150,10 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                 is_active=True
             ).first()
 
+        # Save user
         instance.save()
 
-        # Update disciplines
+        # Update disciplines (replace entire selection)
         if discipline_ids is not None:
             disciplines = Discipline.objects.filter(
                 id__in=discipline_ids,
@@ -164,7 +162,6 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             instance.disciplines.set(disciplines)
 
         return instance
-
 
 # ----------------------------------------------------------------------
 # User Serializer (Response)
@@ -182,7 +179,34 @@ class UserSerializer(serializers.ModelSerializer):
             'user_permissions',
         ]
 
+# ----------------------------------------------------------------------
+# User List Serializer (Response)
+# ----------------------------------------------------------------------
+class UserListSerializer(serializers.ModelSerializer):
+    primary_role = serializers.ReadOnlyField()
+    role_choice_name = serializers.CharField(
+        source='role_choice.name',
+        read_only=True
+    )
 
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'email',
+            'username',
+            'full_name',
+            'primary_role',
+            'is_reviewer',
+            'is_editor',
+            'is_editorial_manager',
+            'is_super_admin',
+            'job_title',
+            'organization',
+            'role_choice_name',
+            'is_active',
+            'created_at',
+        ]
 # ----------------------------------------------------------------------
 # JWT Login Serializer
 # ----------------------------------------------------------------------

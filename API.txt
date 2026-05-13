@@ -109,6 +109,11 @@ Request:
   "want_to_be_reviewer": true
 }
 
+To revert back to author:
+{
+  "want_to_be_reviewer": false
+}
+
 
 7. Get All Role Choices
 GET /api/accounts/role-choices/
@@ -120,17 +125,50 @@ GET /api/accounts/disciplines/
 
 
 ============================================================
-EDITORIAL MANAGER / SUPER ADMIN APIS
+USER MANAGEMENT APIS
+(EDITORIAL MANAGER / SUPER ADMIN ONLY)
 ============================================================
 
-9. Promote User to Reviewer
+9. List All Users
+GET /api/accounts/users/
+
+
+10. Filter Users by Role
+
+Authors:
+GET /api/accounts/users/?role=author
+
+Reviewers:
+GET /api/accounts/users/?role=reviewer
+
+Editors:
+GET /api/accounts/users/?role=editor
+
+Editorial Managers:
+GET /api/accounts/users/?role=editorial_manager
+
+Super Admins:
+GET /api/accounts/users/?role=super_admin
+
+
+11. Toggle Reviewer Status
 POST /api/accounts/users/{user_id}/make-reviewer/
 
 Example:
 POST /api/accounts/users/5/make-reviewer/
 
+Behavior:
+- Author  -> Reviewer
+- Reviewer -> Author
 
-10. Create Role Choice
+
+
+============================================================
+ROLE & DISCIPLINE MANAGEMENT
+(EDITORIAL MANAGER / SUPER ADMIN ONLY)
+============================================================
+
+12. Create Role Choice
 POST /api/accounts/role-choices/
 
 Request:
@@ -139,7 +177,7 @@ Request:
 }
 
 
-11. Update Role Choice
+13. Update Role Choice
 PUT /api/accounts/role-choices/{id}/
 
 Request:
@@ -148,11 +186,11 @@ Request:
 }
 
 
-12. Delete Role Choice
+14. Delete Role Choice
 DELETE /api/accounts/role-choices/{id}/
 
 
-13. Create Discipline
+15. Create Discipline
 POST /api/accounts/disciplines/
 
 Request:
@@ -161,7 +199,7 @@ Request:
 }
 
 
-14. Update Discipline
+16. Update Discipline
 PUT /api/accounts/disciplines/{id}/
 
 Request:
@@ -170,7 +208,7 @@ Request:
 }
 
 
-15. Delete Discipline
+17. Delete Discipline
 DELETE /api/accounts/disciplines/{id}/
 
 
@@ -187,11 +225,11 @@ http://127.0.0.1:8000/api/journals/
 MASTER DATA APIS
 ============================================================
 
-16. Get Article Types
+18. Get Article Types
 GET /api/journals/article-types/
 
 
-17. Create Article Type
+19. Create Article Type
 POST /api/journals/article-types/
 
 Request:
@@ -201,7 +239,7 @@ Request:
 }
 
 
-18. Update Article Type
+20. Update Article Type
 PUT /api/journals/article-types/{id}/
 
 Request:
@@ -211,15 +249,15 @@ Request:
 }
 
 
-19. Delete Article Type
+21. Delete Article Type
 DELETE /api/journals/article-types/{id}/
 
 
-20. Get Subjects
+22. Get Subjects
 GET /api/journals/subjects/
 
 
-21. Create Subject
+23. Create Subject
 POST /api/journals/subjects/
 
 Request:
@@ -230,11 +268,11 @@ Request:
 }
 
 
-22. Get Classifications
+24. Get Classifications
 GET /api/journals/classifications/
 
 
-23. Create Classification
+25. Create Classification
 POST /api/journals/classifications/
 
 Request:
@@ -250,7 +288,7 @@ Request:
 SECTION 3: AUTHOR SUBMISSION WORKFLOW
 ############################################################
 
-24. Create Draft Submission
+26. Create Draft Submission
 POST /api/journals/submissions/
 
 Request:
@@ -259,15 +297,15 @@ Request:
 }
 
 
-25. List My Submissions
+27. List My Submissions
 GET /api/journals/submissions/
 
 
-26. Get Submission Details
+28. Get Submission Details
 GET /api/journals/submissions/{submission_id}/
 
 
-27. Update Step 1 - Article Type
+29. Update Step 1 - Article Type
 PATCH /api/journals/submissions/{submission_id}/
 
 Request:
@@ -276,7 +314,7 @@ Request:
 }
 
 
-28. Update Step 2 - Upload Files
+30. Update Step 2 - Upload Files
 PATCH /api/journals/submissions/{submission_id}/
 
 Content-Type: multipart/form-data
@@ -286,7 +324,7 @@ Fields:
 - cover_letter_file (optional)
 
 
-29. Update Step 3 - Title, Abstract, Keywords
+31. Update Step 3 - Title, Abstract, Keywords
 PATCH /api/journals/submissions/{submission_id}/
 
 Request:
@@ -298,7 +336,7 @@ Request:
 }
 
 
-30. Update Step 5 - Open Access Selection
+32. Update Step 5 - Open Access Selection
 PATCH /api/journals/submissions/{submission_id}/
 
 Request:
@@ -307,7 +345,7 @@ Request:
 }
 
 
-31. Update Step 6 - Select Classifications
+33. Update Step 6 - Select Classifications
 PATCH /api/journals/submissions/{submission_id}/
 
 Request:
@@ -316,7 +354,7 @@ Request:
 }
 
 
-32. Update Step 7 - Additional Information
+34. Update Step 7 - Additional Information
 PATCH /api/journals/submissions/{submission_id}/
 
 Request:
@@ -328,7 +366,7 @@ Request:
 }
 
 
-33. Update Step 8 - Ethics Acceptance
+35. Update Step 8 - Ethics Acceptance
 PATCH /api/journals/submissions/{submission_id}/
 
 Request:
@@ -337,7 +375,7 @@ Request:
 }
 
 
-34. Final Submit Manuscript
+36. Final Submit Manuscript
 POST /api/journals/submissions/{submission_id}/submit/
 
 Conditions:
@@ -345,11 +383,11 @@ Conditions:
 - ethics_accepted = true
 
 
-35. Withdraw Submission
+37. Withdraw Submission
 POST /api/journals/submissions/{submission_id}/withdraw/
 
 
-36. Resubmit Revised Manuscript
+38. Resubmit Revised Manuscript
 POST /api/journals/submissions/{submission_id}/resubmit/
 
 Content-Type: multipart/form-data
@@ -397,15 +435,19 @@ SECTION 5: COMPLETE TESTING ORDER
 5.  POST /api/accounts/role-choices/
 6.  POST /api/accounts/disciplines/
 7.  PATCH /api/accounts/profile/
-8.  POST /api/journals/article-types/
-9.  POST /api/journals/subjects/
-10. POST /api/journals/classifications/
-11. GET  /api/journals/article-types/
-12. POST /api/journals/submissions/
-13. PATCH /api/journals/submissions/{id}/
-14. GET  /api/journals/submissions/{id}/
-15. POST /api/journals/submissions/{id}/submit/
-16. POST /api/journals/submissions/{id}/withdraw/
+8.  GET  /api/accounts/users/
+9.  GET  /api/accounts/users/?role=author
+10. POST /api/accounts/users/{user_id}/make-reviewer/
+11. POST /api/journals/article-types/
+12. POST /api/journals/subjects/
+13. POST /api/journals/classifications/
+14. GET  /api/journals/article-types/
+15. POST /api/journals/submissions/
+16. PATCH /api/journals/submissions/{id}/
+17. GET  /api/journals/submissions/{id}/
+18. POST /api/journals/submissions/{id}/submit/
+19. POST /api/journals/submissions/{id}/withdraw/
+
 
 
 ############################################################
@@ -422,6 +464,7 @@ Editor
 - Assign reviewers
 
 Editorial Manager
+- Manage users, role choices, disciplines
 - Manage article types, subjects, classifications
 - Manage workflow
 
