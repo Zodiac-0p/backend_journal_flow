@@ -5,133 +5,108 @@ pass : Backend@123
 --------------------------------------------------
 ============================================================
 PUBLICATION MANAGER BACKEND - COMPLETE API TEST DOCUMENT
-============================================================
+========================================================
 
 SERVER
-http://127.0.0.1:8000
+[http://127.0.0.1:8000](http://127.0.0.1:8000)
 
 DJANGO ADMIN
-http://127.0.0.1:8000/admin/
-
+[http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)
 
 ############################################################
 SECTION 1: ACCOUNTS API
 ############################################################
 
 BASE URL
-http://127.0.0.1:8000/api/accounts/
-
+[http://127.0.0.1:8000/api/accounts/](http://127.0.0.1:8000/api/accounts/)
 
 ============================================================
 PUBLIC APIS (No Authentication Required)
-============================================================
+========================================
 
 1. Check Email
-POST /api/accounts/check-email/
+   POST /api/accounts/check-email/
 
 Request:
 {
-  "email": "author@example.com"
+"email": "[author@example.com](mailto:author@example.com)"
 }
-
 
 2. Register New User
-POST /api/accounts/register/
+   POST /api/accounts/register/
 
 Request:
 {
-  "email": "author@example.com",
-  "username": "author1",
-  "full_name": "Author One",
-  "password": "StrongPass123",
-  "phone": "9876543210",
-  "affiliation": "ABC University",
-  "expertise": "Artificial Intelligence",
-  "want_to_be_reviewer": true
+"email": "[author@example.com](mailto:author@example.com)",
+"username": "author1",
+"full_name": "Author One",
+"password": "StrongPass123",
+"phone": "9876543210",
+"affiliation": "ABC University",
+"expertise": "Artificial Intelligence",
+"want_to_be_reviewer": true
 }
-
 
 3. Login
-POST /api/accounts/login/
+   POST /api/accounts/login/
 
 Request:
 {
-  "email": "author@example.com",
-  "password": "StrongPass123"
+"email": "[author@example.com](mailto:author@example.com)",
+"password": "StrongPass123"
 }
-
-Response:
-{
-  "refresh": "...",
-  "access": "...",
-  "user": {
-    "id": 1,
-    "email": "author@example.com",
-    "full_name": "Author One",
-    "primary_role": "reviewer"
-  }
-}
-
 
 4. Refresh Access Token
-POST /api/accounts/token/refresh/
+   POST /api/accounts/token/refresh/
 
 Request:
 {
-  "refresh": "your_refresh_token"
+"refresh": "your_refresh_token"
 }
-
-
 
 ============================================================
 AUTHENTICATED APIS
 Header:
 Authorization: Bearer <access_token>
-============================================================
+====================================
 
 5. Get Profile
-GET /api/accounts/profile/
-
+   GET /api/accounts/profile/
 
 6. Update Complete Profile
-PATCH /api/accounts/profile/
+   PATCH /api/accounts/profile/
 
 Request:
 {
-  "full_name": "SADIQ ALI",
-  "phone": "9876543210",
-  "affiliation": "Signal Semitech Pvt Ltd",
-  "expertise": "Machine Learning, Artificial Intelligence",
-  "job_title": "Software Developer",
-  "organization": "Signal Semitech Pvt Ltd",
-  "role_choice_id": 25,
-  "discipline_ids": [1, 5, 12],
-  "want_to_be_reviewer": true
+"full_name": "SADIQ ALI",
+"phone": "9876543210",
+"affiliation": "Signal Semitech Pvt Ltd",
+"expertise": "Machine Learning, Artificial Intelligence",
+"job_title": "Software Developer",
+"organization": "Signal Semitech Pvt Ltd",
+"role_choice_id": 25,
+"discipline_ids": [1, 5, 12],
+"want_to_be_reviewer": true
 }
 
 To revert back to author:
 {
-  "want_to_be_reviewer": false
+"want_to_be_reviewer": false
 }
 
-
 7. Get All Role Choices
-GET /api/accounts/role-choices/
-
+   GET /api/accounts/role-choices/
 
 8. Get All Disciplines
-GET /api/accounts/disciplines/
-
-
+   GET /api/accounts/disciplines/
 
 ============================================================
 USER MANAGEMENT APIS
 (EDITORIAL MANAGER / SUPER ADMIN ONLY)
-============================================================
+======================================
 
 9. List All Users
-GET /api/accounts/users/
-
+   GET /api/accounts/users/
 
 10. Filter Users by Role
 
@@ -150,253 +125,310 @@ GET /api/accounts/users/?role=editorial_manager
 Super Admins:
 GET /api/accounts/users/?role=super_admin
 
-
 11. Toggle Reviewer Status
-POST /api/accounts/users/{user_id}/make-reviewer/
-
-Example:
-POST /api/accounts/users/5/make-reviewer/
+    POST /api/accounts/users/{user_id}/make-reviewer/
 
 Behavior:
-- Author  -> Reviewer
-- Reviewer -> Author
 
-
+* Author -> Reviewer
+* Reviewer -> Author
 
 ============================================================
 ROLE & DISCIPLINE MANAGEMENT
 (EDITORIAL MANAGER / SUPER ADMIN ONLY)
-============================================================
+======================================
 
 12. Create Role Choice
-POST /api/accounts/role-choices/
+    POST /api/accounts/role-choices/
 
 Request:
 {
-  "name": "Software Developer"
+"name": "Software Developer"
 }
-
 
 13. Update Role Choice
-PUT /api/accounts/role-choices/{id}/
-
-Request:
-{
-  "name": "Senior Software Developer"
-}
-
+    PUT /api/accounts/role-choices/{id}/
 
 14. Delete Role Choice
-DELETE /api/accounts/role-choices/{id}/
-
+    DELETE /api/accounts/role-choices/{id}/
 
 15. Create Discipline
-POST /api/accounts/disciplines/
+    POST /api/accounts/disciplines/
 
 Request:
 {
-  "name": "Computer Science"
+"name": "Computer Science"
 }
-
 
 16. Update Discipline
-PUT /api/accounts/disciplines/{id}/
-
-Request:
-{
-  "name": "Advanced Computer Science"
-}
-
+    PUT /api/accounts/disciplines/{id}/
 
 17. Delete Discipline
-DELETE /api/accounts/disciplines/{id}/
-
-
+    DELETE /api/accounts/disciplines/{id}/
 
 ############################################################
 SECTION 2: JOURNALS API
 ############################################################
 
 BASE URL
-http://127.0.0.1:8000/api/journals/
-
+[http://127.0.0.1:8000/api/journals/](http://127.0.0.1:8000/api/journals/)
 
 ============================================================
 MASTER DATA APIS
-============================================================
+================
 
-18. Get Article Types
-GET /api/journals/article-types/
+18. Get Subjects
+    GET /api/journals/subjects/
 
+19. Create Subject
+    POST /api/journals/subjects/
 
-19. Create Article Type
-POST /api/journals/article-types/
+20. Update Subject
+    PUT /api/journals/subjects/{id}/
 
-Request:
-{
-  "name": "Research Paper",
-  "is_active": true
-}
+21. Delete Subject
+    DELETE /api/journals/subjects/{id}/
 
+22. Get Article Types
+    GET /api/journals/article-types/
 
-20. Update Article Type
-PUT /api/journals/article-types/{id}/
-
-Request:
-{
-  "name": "Review Article",
-  "is_active": true
-}
-
-
-21. Delete Article Type
-DELETE /api/journals/article-types/{id}/
-
-
-22. Get Subjects
-GET /api/journals/subjects/
-
-
-23. Create Subject
-POST /api/journals/subjects/
+23. Create Article Type
+    POST /api/journals/article-types/
 
 Request:
 {
-  "name": "Computer Science",
-  "description": "Research in computing",
-  "is_active": true
+"name": "Research Article",
+"is_active": true
 }
 
+24. Update Article Type
+    PUT /api/journals/article-types/{id}/
 
-24. Get Classifications
-GET /api/journals/classifications/
+25. Delete Article Type
+    DELETE /api/journals/article-types/{id}/
 
+26. Get Classifications
+    GET /api/journals/classifications/
 
-25. Create Classification
-POST /api/journals/classifications/
+27. Create Classification
+    POST /api/journals/classifications/
 
 Request:
 {
-  "name": "Machine Learning",
-  "subject": 1,
-  "is_active": true
+"name": "Machine Learning",
+"subject": 1,
+"is_active": true
 }
 
+28. Update Classification
+    PUT /api/journals/classifications/{id}/
 
+29. Delete Classification
+    DELETE /api/journals/classifications/{id}/
+
+30. Get Contributor Roles
+    GET /api/journals/contributor-roles/
+
+31. Create Contributor Role
+    POST /api/journals/contributor-roles/
+
+Request:
+{
+"name": "Conceptualization",
+"is_active": true
+}
+
+32. Update Contributor Role
+    PUT /api/journals/contributor-roles/{id}/
+
+33. Delete Contributor Role
+    DELETE /api/journals/contributor-roles/{id}/
+
+34. Get Submission File Types
+    GET /api/journals/submission-file-types/
+
+35. Create Submission File Type
+    POST /api/journals/submission-file-types/
+
+Request:
+{
+"name": "Manuscript",
+"is_required": true,
+"allow_multiple": false,
+"is_active": true
+}
+
+36. Update Submission File Type
+    PUT /api/journals/submission-file-types/{id}/
+
+37. Delete Submission File Type
+    DELETE /api/journals/submission-file-types/{id}/
 
 ############################################################
 SECTION 3: AUTHOR SUBMISSION WORKFLOW
 ############################################################
 
-26. Create Draft Submission
-POST /api/journals/submissions/
+38. Create Draft Submission
+    POST /api/journals/submissions/
 
 Request:
 {
-  "article_type": 1
+"article_type": 1
 }
 
+39. List My Submissions
+    GET /api/journals/submissions/
 
-27. List My Submissions
-GET /api/journals/submissions/
+40. Get Submission Details
+    GET /api/journals/submissions/{submission_id}/
+
+41. Update Submission (General PATCH)
+    PATCH /api/journals/submissions/{submission_id}/
+
+============================================================
+STEP 2: SUBMISSION FILES
+========================
+
+42. List Uploaded Files
+    GET /api/journals/submissions/{submission_id}/files/
+
+43. Upload File
+    POST /api/journals/submissions/{submission_id}/files/
 
 
-28. Get Submission Details
-GET /api/journals/submissions/{submission_id}/
+curl.exe -X POST "http://127.0.0.1:8000/api/journals/submissions/3/files/" `  -H "" `  -F "file_type=" `  -F "file=@C:\Users\sadiq\Desktop\Elink_questions_v2.pdf"
 
-
-29. Update Step 1 - Article Type
-PATCH /api/journals/submissions/{submission_id}/
-
-Request:
-{
-  "article_type": 1
-}
-
-
-30. Update Step 2 - Upload Files
-PATCH /api/journals/submissions/{submission_id}/
-
-Content-Type: multipart/form-data
+Body Type: multipart/form-data
 
 Fields:
-- manuscript_file
-- cover_letter_file (optional)
 
+* file_type (Text)
+* file (File)
 
-31. Update Step 3 - Title, Abstract, Keywords
-PATCH /api/journals/submissions/{submission_id}/
+Example:
+file_type = 1
+file = manuscript.pdf
 
-Request:
-{
-  "title": "Koopman-Based Model Predictive Control for Microgrids",
-  "abstract": "This paper presents a data-driven control strategy...",
-  "keywords": "Koopman, MPC, Microgrid, DMDc",
-  "subject": 1
-}
+44. Get File Details
+    GET /api/journals/submission-files/{id}/
 
+45. Delete Uploaded File
+    DELETE /api/journals/submission-files/{id}/
+============================================================
+STEP 3: TITLE, ABSTRACT, KEYWORDS
+=================================
 
-32. Update Step 5 - Open Access Selection
-PATCH /api/journals/submissions/{submission_id}/
-
-Request:
-{
-  "open_access": true
-}
-
-
-33. Update Step 6 - Select Classifications
-PATCH /api/journals/submissions/{submission_id}/
+46. Update Title and Abstract
+    PATCH /api/journals/submissions/{submission_id}/
 
 Request:
 {
-  "discipline_ids": [1, 2, 5]
+"title": "Koopman-Based Model Predictive Control for Microgrids",
+"abstract": "This paper presents a data-driven control strategy...",
+"keywords": "Koopman, MPC, Microgrid, DMDc",
+"subject": 1
 }
 
+============================================================
+STEP 4: AUTHORS
+===============
 
-34. Update Step 7 - Additional Information
-PATCH /api/journals/submissions/{submission_id}/
+47. List Authors
+    GET /api/journals/submissions/{submission_id}/authors/
+
+48. Add Author
+    POST /api/journals/submissions/{submission_id}/authors/
 
 Request:
 {
-  "funding_information": "Supported by DST India.",
-  "conflict_of_interest": "No conflicts of interest.",
-  "suggested_reviewers": "reviewer1@example.com, reviewer2@example.com",
-  "additional_notes": "This manuscript is part of doctoral research."
+"first_name": "John",
+"last_name": "Doe",
+"institution": "MIT",
+"email": "[john@example.com](mailto:john@example.com)",
+"contributor_role_ids": [1, 2],
+"is_corresponding_author": true,
+"order": 1
 }
 
+49. Get Author Details
+    GET /api/journals/submission-authors/{id}/
 
-35. Update Step 8 - Ethics Acceptance
-PATCH /api/journals/submissions/{submission_id}/
+50. Update Author
+    PATCH /api/journals/submission-authors/{id}/
+
+51. Delete Author
+    DELETE /api/journals/submission-authors/{id}/
+
+============================================================
+STEP 5: OPEN ACCESS
+===================
+
+52. Update Open Access Selection
+    PATCH /api/journals/submissions/{submission_id}/
 
 Request:
 {
-  "ethics_accepted": true
+"open_access": true
 }
 
+============================================================
+STEP 6: CLASSIFICATIONS
+=======================
 
-36. Final Submit Manuscript
-POST /api/journals/submissions/{submission_id}/submit/
+53. Update Classifications
+    PATCH /api/journals/submissions/{submission_id}/
 
-Conditions:
-- All required sections completed
-- ethics_accepted = true
+Request:
+{
+"discipline_ids": [1, 2, 5]
+}
 
+============================================================
+STEP 7: ADDITIONAL INFORMATION
+==============================
 
-37. Withdraw Submission
-POST /api/journals/submissions/{submission_id}/withdraw/
+54. Update Additional Information
+    PATCH /api/journals/submissions/{submission_id}/
 
+Request:
+{
+"funding_information": "Supported by DST India.",
+"conflict_of_interest": "No conflicts of interest.",
+"suggested_reviewers": "[reviewer1@example.com](mailto:reviewer1@example.com), [reviewer2@example.com](mailto:reviewer2@example.com)",
+"additional_notes": "This manuscript is part of doctoral research."
+}
 
-38. Resubmit Revised Manuscript
-POST /api/journals/submissions/{submission_id}/resubmit/
+============================================================
+STEP 8: ETHICS ACCEPTANCE
+=========================
 
-Content-Type: multipart/form-data
+55. Accept Ethics Policy
+    PATCH /api/journals/submissions/{submission_id}/
+
+Request:
+{
+"ethics_accepted": true
+}
+
+============================================================
+SUBMISSION ACTIONS
+==================
+
+56. Final Submit Manuscript
+    POST /api/journals/submissions/{submission_id}/submit/
+
+57. Withdraw Submission
+    POST /api/journals/submissions/{submission_id}/withdraw/
+
+58. Resubmit Revised Manuscript
+    POST /api/journals/submissions/{submission_id}/resubmit/
+
+Body Type: multipart/form-data
 
 Fields:
-- manuscript_file
-- revision_notes
 
-
+* manuscript_file
+* revision_notes
 
 ############################################################
 SECTION 4: DRAFT STATUS RESPONSE
@@ -405,68 +437,79 @@ SECTION 4: DRAFT STATUS RESPONSE
 GET/PATCH submission returns:
 
 {
-  "id": 1,
-  "status": "draft",
-  "completed_sections": 5,
-  "total_sections": 7,
-  "is_ready_to_submit": false,
-  "sections": {
-    "article_type": true,
-    "submission_files": true,
-    "title_abstract_keywords": true,
-    "author_details": true,
-    "open_access": true,
-    "classifications": false,
-    "additional_information": false,
-    "ethics_accepted": false
-  }
+"id": 1,
+"status": "draft",
+"completed_sections": 5,
+"total_sections": 7,
+"is_ready_to_submit": false,
+"sections": {
+"article_type": true,
+"submission_files": true,
+"title_abstract_keywords": true,
+"author_details": true,
+"open_access": true,
+"classifications": false,
+"additional_information": false,
+"ethics_accepted": false
 }
-
-
+}
 
 ############################################################
 SECTION 5: COMPLETE TESTING ORDER
 ############################################################
 
-1.  POST /api/accounts/check-email/
-2.  POST /api/accounts/register/
-3.  POST /api/accounts/login/
-4.  GET  /api/accounts/profile/
-5.  POST /api/accounts/role-choices/
-6.  POST /api/accounts/disciplines/
-7.  PATCH /api/accounts/profile/
-8.  GET  /api/accounts/users/
-9.  GET  /api/accounts/users/?role=author
-10. POST /api/accounts/users/{user_id}/make-reviewer/
-11. POST /api/journals/article-types/
-12. POST /api/journals/subjects/
-13. POST /api/journals/classifications/
-14. GET  /api/journals/article-types/
-15. POST /api/journals/submissions/
-16. PATCH /api/journals/submissions/{id}/
-17. GET  /api/journals/submissions/{id}/
-18. POST /api/journals/submissions/{id}/submit/
-19. POST /api/journals/submissions/{id}/withdraw/
-
-
+1. Check Email
+2. Register
+3. Login
+4. Get Profile
+5. Create Role Choices
+6. Create Disciplines
+7. Update Profile
+8. List Users
+9. Toggle Reviewer Status
+10. Create Subjects
+11. Create Article Types
+12. Create Classifications
+13. Create Contributor Roles
+14. Create Submission File Types
+15. Create Draft Submission
+16. Upload Manuscript
+17. Upload Additional Files
+18. Add Authors
+19. Update Title and Abstract
+20. Update Open Access
+21. Update Classifications
+22. Update Additional Information
+23. Accept Ethics Policy
+24. Final Submit Manuscript
+25. Withdraw Submission
+26. Resubmit Revised Manuscript
 
 ############################################################
 SECTION 6: USER ROLES
 ############################################################
 
 Author
-- Register and submit manuscripts
+
+* Register and submit manuscripts
 
 Reviewer
-- Review assigned manuscripts
+
+* Review assigned manuscripts
 
 Editor
-- Assign reviewers
+
+* Assign reviewers
 
 Editorial Manager
-- Manage users, role choices, disciplines
-- Manage article types, subjects, classifications
-- Manage workflow
+
+* Manage users
+* Manage role choices and disciplines
+* Manage journal master data
+* Monitor submission workflow
 
 Super Admin
-- Full system control
+
+* Full system control
+
+
