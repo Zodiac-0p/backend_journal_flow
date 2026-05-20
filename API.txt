@@ -380,7 +380,7 @@ STEP 6: CLASSIFICATIONS
 
 Request:
 {
-"discipline_ids": [1, 2, 5]
+"classification": [1, 2, 5]
 }
 
 ============================================================

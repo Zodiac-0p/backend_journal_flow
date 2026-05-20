@@ -1,7 +1,6 @@
 from django.contrib import admin
 
 from .models import (
-    Subject,
     ArticleType,
     Classification,
     Submission,
@@ -16,22 +15,6 @@ from .models import (
 # ==================================================
 # MASTER DATA ADMIN
 # ==================================================
-
-@admin.register(Subject)
-class SubjectAdmin(admin.ModelAdmin):
-    list_display = (
-        'name',
-        'is_active',
-    )
-    list_filter = (
-        'is_active',
-    )
-    search_fields = (
-        'name',
-    )
-    ordering = (
-        'name',
-    )
 
 
 @admin.register(ArticleType)
@@ -57,12 +40,10 @@ class ArticleTypeAdmin(admin.ModelAdmin):
 class ClassificationAdmin(admin.ModelAdmin):
     list_display = (
         'name',
-        'subject',
         'is_active',
     )
     list_filter = (
         'is_active',
-        'subject',
     )
     search_fields = (
         'name',
@@ -164,7 +145,6 @@ class SubmissionAdmin(admin.ModelAdmin):
         'title',
         'author',
         'article_type',
-        'subject',
         'status',
         'created_at',
         'submitted_at',
@@ -172,7 +152,6 @@ class SubmissionAdmin(admin.ModelAdmin):
     list_filter = (
         'status',
         'article_type',
-        'subject',
         'created_at',
     )
     search_fields = (

@@ -4,18 +4,6 @@ from django.conf import settings
 from django.db import models
 
 
-class Subject(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    description = models.TextField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ['name']
-
-    def __str__(self):
-        return self.name
-
-
 class ArticleType(models.Model):
     """
     Step 1: Choose your article type.
@@ -66,15 +54,19 @@ class SubmissionFileType(models.Model):
 
 
 class Classification(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    subject = models.ForeignKey(
-        Subject,
-        on_delete=models.CASCADE,
-        related_name='classifications',
-        null=True,
-        blank=True,
+    name = models.CharField(
+        max_length=255,
+        unique=True,
     )
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(
+        default=True,
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
 
     class Meta:
         ordering = ['name']
@@ -130,13 +122,6 @@ class Submission(models.Model):
     title = models.CharField(max_length=500, blank=True)
     abstract = models.TextField(blank=True)
     keywords = models.TextField(blank=True)
-    subject = models.ForeignKey(
-        Subject,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='submissions'
-    )
 
     # Step 5
     open_access = models.BooleanField(null=True, blank=True)
@@ -276,51 +261,55 @@ class SubmissionAuthor(models.Model):
 
 class SubmissionFile(models.Model):
     submission = models.ForeignKey(
-        Submission,
+        'Submission',
         on_delete=models.CASCADE,
-        related_name='submission_files'
+        related_name='submission_files',
     )
-
     file_type = models.ForeignKey(
-        SubmissionFileType,
-        on_delete=models.PROTECT,
-        related_name='files'
+        'SubmissionFileType',
+        on_delete=models.CASCADE,
+        related_name='files',
     )
-
-    file = models.FileField(upload_to='submissions/files/')
-
+    file = models.FileField(
+        upload_to='submissions/files/'
+    )
     original_filename = models.CharField(
-        max_length=500,
-        blank=True
+        max_length=255,
+        blank=True,
     )
-
     file_size = models.PositiveBigIntegerField(
-        null=True,
-        blank=True
+        default=0,
     )
-
     uploaded_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
-        blank=True
+        blank=True,
+        related_name='uploaded_submission_files',
     )
-
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
 
     class Meta:
         ordering = ['-created_at']
 
     def save(self, *args, **kwargs):
         if self.file:
-            self.original_filename = os.path.basename(self.file.name)
-            if hasattr(self.file, 'size'):
-                self.file_size = self.file.size
+            self.original_filename = self.file.name.split('/')[-1]
+            self.file_size = self.file.size
         super().save(*args, **kwargs)
 
-    def __str__(self):
-        return f'{self.file_type.name} - {self.original_filename}'
+    def delete(self, *args, **kwargs):
+        # Delete the actual file from storage first
+        if self.file:
+            self.file.delete(save=False)
 
+        # Delete the database record
+        super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.submission.title} - {self.file_type.name}'
 
 class SubmissionVersion(models.Model):
     submission = models.ForeignKey(

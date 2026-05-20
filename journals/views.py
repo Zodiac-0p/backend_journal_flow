@@ -6,7 +6,6 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import (
-    Subject,
     ArticleType,
     Classification,
     Submission,
@@ -21,7 +20,6 @@ from .permissions import (
     IsEditorialManagerOrSuperAdmin,
 )
 from .serializers import (
-    SubjectSerializer,
     ArticleTypeSerializer,
     ClassificationSerializer,
     SubmissionSerializer,
@@ -37,24 +35,6 @@ from .serializers import (
 # ==================================================
 # MASTER DATA VIEWSETS
 # ==================================================
-
-class SubjectViewSet(viewsets.ModelViewSet):
-    serializer_class = SubjectSerializer
-
-    def get_queryset(self):
-        if (
-            self.request.user.is_editorial_manager
-            or self.request.user.is_super_admin
-        ):
-            return Subject.objects.all()
-
-        return Subject.objects.filter(is_active=True)
-
-    def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
-            return [IsAuthenticated()]
-
-        return [IsEditorialManagerOrSuperAdmin()]
 
 
 class ArticleTypeViewSet(viewsets.ModelViewSet):
@@ -84,9 +64,9 @@ class ClassificationViewSet(viewsets.ModelViewSet):
             self.request.user.is_editorial_manager
             or self.request.user.is_super_admin
         ):
-            return Classification.objects.select_related('subject').all()
+            return Classification.objects.all()
 
-        return Classification.objects.select_related('subject').filter(
+        return Classification.objects.filter(
             is_active=True
         )
 
@@ -147,7 +127,6 @@ class SubmissionViewSet(viewsets.ModelViewSet):
 
         queryset = Submission.objects.select_related(
             'author',
-            'subject',
             'article_type',
         ).prefetch_related(
             'classifications',

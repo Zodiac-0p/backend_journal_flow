@@ -2,7 +2,6 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
-    Subject,
     ArticleType,
     Classification,
     Submission,
@@ -18,12 +17,6 @@ from .models import (
 # --------------------------------------------------
 # Master Data Serializers
 # --------------------------------------------------
-
-class SubjectSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subject
-        fields = '__all__'
-
 
 class ArticleTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -220,10 +213,6 @@ class SubmissionSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
-    subject_name = serializers.CharField(
-        source='subject.name',
-        read_only=True,
-    )
 
     article_type_name = serializers.CharField(
         source='article_type.name',
@@ -258,7 +247,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     is_ready_to_submit = serializers.ReadOnlyField()
 
     # Accept classification IDs from frontend
-    discipline_ids = serializers.PrimaryKeyRelatedField(
+    classification_ids = serializers.PrimaryKeyRelatedField(
         source='classifications',
         queryset=Classification.objects.filter(is_active=True),
         many=True,
@@ -272,7 +261,6 @@ class SubmissionSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'author',
             'author_name',
-            'subject_name',
             'article_type_name',
             'status',
             'submitted_at',

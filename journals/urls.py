@@ -2,7 +2,6 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    SubjectViewSet,
     ArticleTypeViewSet,
     ClassificationViewSet,
     SubmissionViewSet,
@@ -17,7 +16,6 @@ from .views import (
 router = DefaultRouter()
 
 # Master Data APIs
-router.register('subjects', SubjectViewSet, basename='subject')
 router.register('article-types', ArticleTypeViewSet, basename='article-type')
 router.register('classifications', ClassificationViewSet, basename='classification')
 router.register('contributor-roles', ContributorRoleViewSet, basename='contributor-role')
