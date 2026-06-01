@@ -31,6 +31,7 @@ class CustomUserAdmin(UserAdmin):
         'is_staff',
         'role_choice',
         'disciplines',
+        'classifications',
     )
 
     # Search box
@@ -43,6 +44,7 @@ class CustomUserAdmin(UserAdmin):
         'organization',
         'job_title',
         'expertise',
+        'classifications__name',
     )
 
     ordering = ('-created_at',)
@@ -52,6 +54,7 @@ class CustomUserAdmin(UserAdmin):
         'groups',
         'user_permissions',
         'disciplines',
+        'classifications',
     )
 
     # Add user form fields
@@ -94,6 +97,7 @@ class CustomUserAdmin(UserAdmin):
                 'expertise',
                 'role_choice',
                 'disciplines',
+                'classifications',
             )
         }),
 

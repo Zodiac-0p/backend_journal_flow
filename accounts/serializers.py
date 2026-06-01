@@ -4,9 +4,13 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from journals.models import Classification
+from user_notifications.utils import notify_user
 from .models import RoleChoice, Discipline
 
 User = get_user_model()
+
+MIN_CLASSIFICATIONS_REQUIRED = 4
 
 
 # ----------------------------------------------------------------------
@@ -33,6 +37,33 @@ class DisciplineSerializer(serializers.ModelSerializer):
         }
 
 
+class UserClassificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Classification
+        fields = ['id', 'name', 'is_active']
+
+
+def get_active_classifications(classification_ids):
+    unique_ids = set(classification_ids)
+
+    if len(unique_ids) < MIN_CLASSIFICATIONS_REQUIRED:
+        raise serializers.ValidationError(
+            f'Select at least {MIN_CLASSIFICATIONS_REQUIRED} classifications.'
+        )
+
+    classifications = Classification.objects.filter(
+        id__in=unique_ids,
+        is_active=True,
+    )
+
+    if classifications.count() != len(unique_ids):
+        raise serializers.ValidationError(
+            'One or more selected classifications are invalid or inactive.'
+        )
+
+    return classifications
+
+
 # ----------------------------------------------------------------------
 # Registration Serializer
 # ----------------------------------------------------------------------
@@ -56,6 +87,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         required=False
     )
 
+    classification_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True
+    )
+
     class Meta:
         model = User
         fields = [
@@ -71,12 +108,18 @@ class RegisterSerializer(serializers.ModelSerializer):
             'want_to_be_reviewer',
             'role_choice_id',
             'discipline_ids',
+            'classification_ids',
         ]
+
+    def validate_classification_ids(self, value):
+        get_active_classifications(value)
+        return value
 
     def create(self, validated_data):
         want_to_be_reviewer = validated_data.pop('want_to_be_reviewer', False)
         role_choice_id = validated_data.pop('role_choice_id', None)
         discipline_ids = validated_data.pop('discipline_ids', [])
+        classification_ids = validated_data.pop('classification_ids', [])
         password = validated_data.pop('password')
 
         user = User(**validated_data)
@@ -103,6 +146,20 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
             user.disciplines.set(disciplines)
 
+        user.classifications.set(
+            get_active_classifications(classification_ids)
+        )
+
+        notify_user(
+            user=user,
+            title='Welcome to Publication Manager',
+            message=(
+                f'Hello {user.full_name}, your Publication Manager account '
+                'has been created successfully.'
+            ),
+            notification_type='system',
+        )
+
         return user
 
 
@@ -119,6 +176,11 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         required=False
     )
 
+    classification_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False
+    )
+
     class Meta:
         model = User
         fields = [
@@ -131,7 +193,12 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             'want_to_be_reviewer',
             'role_choice_id',
             'discipline_ids',
+            'classification_ids',
         ]
+
+    def validate_classification_ids(self, value):
+        get_active_classifications(value)
+        return value
 
     def update(self, instance, validated_data):
         # Toggle reviewer status
@@ -142,6 +209,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         # Profile relationships
         role_choice_id = validated_data.pop('role_choice_id', None)
         discipline_ids = validated_data.pop('discipline_ids', None)
+        classification_ids = validated_data.pop('classification_ids', None)
 
         # Update normal fields
         for attr, value in validated_data.items():
@@ -169,6 +237,11 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             )
             instance.disciplines.set(disciplines)
 
+        if classification_ids is not None:
+            instance.classifications.set(
+                get_active_classifications(classification_ids)
+            )
+
         return instance
 
 # ----------------------------------------------------------------------
@@ -178,6 +251,7 @@ class UserSerializer(serializers.ModelSerializer):
     primary_role = serializers.ReadOnlyField()
     role_choice = RoleChoiceSerializer(read_only=True)
     disciplines = DisciplineSerializer(many=True, read_only=True)
+    classifications = UserClassificationSerializer(many=True, read_only=True)
 
     class Meta:
         model = User

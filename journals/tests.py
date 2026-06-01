@@ -1,19 +1,33 @@
 import shutil
 import tempfile
+from datetime import timedelta
 
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
+from django.db.models.signals import pre_save, post_save
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import User
+from user_notifications.models import Notification
+from .signals import (
+    remember_previous_submission_status,
+    notify_author_on_submission_status_change,
+)
 from .models import (
+    ArticleType,
     Submission,
     SubmissionAuthor,
     SubmissionFile,
     SubmissionFileType,
     SubmissionStatus,
+    Classification,
+    SubmissionReviewerAssignment,
+    ReviewerAssignmentStatus,
 )
 
 
@@ -267,3 +281,640 @@ class SubmissionResubmitStatusTests(APITestCase):
         submission.refresh_from_db()
         self.assertEqual(submission.status, SubmissionStatus.SUBMITTED)
         self.assertEqual(submission.versions.count(), 1)
+
+
+class SubmissionClassificationSelectionTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            email='classification-author@example.com',
+            username='classification-author',
+            full_name='Classification Author',
+            password='StrongPass123',
+        )
+        self.submission = Submission.objects.create(
+            author=self.author,
+            title='Classification manuscript',
+        )
+        self.classifications = [
+            Classification.objects.create(name=f'Journal Classification {index}')
+            for index in range(1, 5)
+        ]
+
+    def test_submission_update_requires_at_least_four_classifications(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.patch(
+            reverse('submission-detail', kwargs={'pk': self.submission.pk}),
+            {
+                'classification_ids': [
+                    classification.id
+                    for classification in self.classifications[:3]
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_submission_update_accepts_four_classifications(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.patch(
+            reverse('submission-detail', kwargs={'pk': self.submission.pk}),
+            {
+                'classification_ids': [
+                    classification.id
+                    for classification in self.classifications
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.classifications.count(), 4)
+        self.assertTrue(self.submission.sections['classifications'])
+
+
+class ClassificationPublicReadTests(APITestCase):
+    def test_unauthenticated_user_can_list_active_classifications(self):
+        Classification.objects.create(name='Visible Classification')
+        Classification.objects.create(
+            name='Inactive Classification',
+            is_active=False,
+        )
+
+        response = self.client.get(reverse('classification-list'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['name'], 'Visible Classification')
+
+
+class SubmissionEditorAutoAssignmentTests(APITestCase):
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_submit_assigns_least_loaded_editor_and_notifies_editor(self):
+        author = User.objects.create_user(
+            email='submit-author@example.com',
+            username='submit-author',
+            full_name='Submit Author',
+            password='StrongPass123',
+        )
+        loaded_editor = User.objects.create_user(
+            email='loaded-editor@example.com',
+            username='loaded-editor',
+            full_name='Loaded Editor',
+            password='StrongPass123',
+            is_editor=True,
+        )
+        least_loaded_editor = User.objects.create_user(
+            email='least-loaded-editor@example.com',
+            username='least-loaded-editor',
+            full_name='Least Loaded Editor',
+            password='StrongPass123',
+            is_editor=True,
+        )
+        article_type = ArticleType.objects.create(name='Research Article')
+        classifications = [
+            Classification.objects.create(name=f'Submit Class {index}')
+            for index in range(1, 5)
+        ]
+        submission = Submission.objects.create(
+            author=author,
+            article_type=article_type,
+            title='Ready manuscript',
+            abstract='Ready abstract',
+            keywords='ready, manuscript',
+            open_access=True,
+            funding_information='No funding.',
+            ethics_accepted=True,
+        )
+        submission.classifications.set(classifications)
+        SubmissionAuthor.objects.create(
+            submission=submission,
+            first_name='Ready',
+            last_name='Author',
+            institution='ABC University',
+            email='ready@example.com',
+        )
+        Submission.objects.create(
+            author=author,
+            assigned_editor=loaded_editor,
+            title='Existing editor workload',
+            status=SubmissionStatus.UNDER_EDITOR_REVIEW,
+        )
+
+        self.client.force_authenticate(author)
+        response = self.client.post(
+            reverse('submission-submit', kwargs={'pk': submission.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.assigned_editor, least_loaded_editor)
+        self.assertEqual(
+            submission.status,
+            SubmissionStatus.UNDER_EDITOR_REVIEW,
+        )
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=least_loaded_editor,
+                title='New Submission Assigned',
+            ).exists()
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                user=author,
+                title='Submission Status Updated',
+            ).exists()
+        )
+
+
+class SubmissionReviewerAssignmentTests(APITestCase):
+    def save_submission_without_status_notifications(self):
+        pre_save.disconnect(
+            remember_previous_submission_status,
+            sender=Submission,
+        )
+        post_save.disconnect(
+            notify_author_on_submission_status_change,
+            sender=Submission,
+        )
+        try:
+            self.submission.save(update_fields=['status'])
+        finally:
+            pre_save.connect(
+                remember_previous_submission_status,
+                sender=Submission,
+            )
+            post_save.connect(
+                notify_author_on_submission_status_change,
+                sender=Submission,
+            )
+
+    def setUp(self):
+        self.author = User.objects.create_user(
+            email='assignment-author@example.com',
+            username='assignment-author',
+            full_name='Assignment Author',
+            password='StrongPass123',
+        )
+        self.editor = User.objects.create_user(
+            email='assignment-editor@example.com',
+            username='assignment-editor',
+            full_name='Assignment Editor',
+            password='StrongPass123',
+            is_editor=True,
+        )
+        self.matching_reviewer = User.objects.create_user(
+            email='matching-reviewer@example.com',
+            username='matching-reviewer',
+            full_name='Matching Reviewer',
+            password='StrongPass123',
+            is_reviewer=True,
+        )
+        self.second_matching_reviewer = User.objects.create_user(
+            email='second-matching-reviewer@example.com',
+            username='second-matching-reviewer',
+            full_name='Second Matching Reviewer',
+            password='StrongPass123',
+            is_reviewer=True,
+        )
+        self.other_reviewer = User.objects.create_user(
+            email='other-reviewer@example.com',
+            username='other-reviewer',
+            full_name='Other Reviewer',
+            password='StrongPass123',
+            is_reviewer=True,
+        )
+        self.classifications = [
+            Classification.objects.create(name=f'Assignment Class {index}')
+            for index in range(1, 5)
+        ]
+        self.other_classification = Classification.objects.create(
+            name='Other Assignment Class'
+        )
+        self.matching_reviewer.classifications.set(
+            self.classifications[:2]
+        )
+        self.second_matching_reviewer.classifications.set(
+            self.classifications[2:]
+        )
+        self.other_reviewer.classifications.set(
+            [self.other_classification]
+        )
+        self.submission = Submission.objects.create(
+            author=self.author,
+            title='Submitted manuscript',
+            status=SubmissionStatus.SUBMITTED,
+        )
+        self.submission.classifications.set(self.classifications)
+
+    def test_editor_can_list_submission_selected_classifications(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                'submission-selected-classifications',
+                kwargs={'pk': self.submission.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 4)
+
+    def test_editor_can_list_only_matching_reviewers(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.get(
+            reverse(
+                'submission-eligible-reviewers',
+                kwargs={'pk': self.submission.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        reviewer_ids = {reviewer['id'] for reviewer in response.data}
+        self.assertEqual(
+            reviewer_ids,
+            {
+                self.matching_reviewer.id,
+                self.second_matching_reviewer.id,
+            },
+        )
+
+    def test_author_cannot_list_eligible_reviewers(self):
+        self.client.force_authenticate(self.author)
+
+        response = self.client.get(
+            reverse(
+                'submission-eligible-reviewers',
+                kwargs={'pk': self.submission.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_editor_can_assign_matching_reviewer(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                'submission-assign-reviewer',
+                kwargs={'pk': self.submission.pk},
+            ),
+            {
+                'reviewer_id': self.matching_reviewer.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            SubmissionReviewerAssignment.objects.filter(
+                submission=self.submission,
+                reviewer=self.matching_reviewer,
+            ).exists()
+        )
+
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.status,
+            SubmissionStatus.UNDER_PEER_REVIEW,
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_reviewer_assignment_notifies_reviewer_and_author(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                'submission-assign-reviewer',
+                kwargs={'pk': self.submission.pk},
+            ),
+            {
+                'reviewer_id': self.matching_reviewer.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.matching_reviewer,
+                title='Reviewer Assignment',
+            ).exists()
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.author,
+                title='Submission Status Updated',
+            ).exists()
+        )
+
+    def test_editor_can_assign_multiple_matching_reviewers(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                'submission-assign-reviewer',
+                kwargs={'pk': self.submission.pk},
+            ),
+            {
+                'reviewer_ids': [
+                    self.matching_reviewer.id,
+                    self.second_matching_reviewer.id,
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(
+            SubmissionReviewerAssignment.objects.filter(
+                submission=self.submission,
+                is_active=True,
+            ).count(),
+            2,
+        )
+
+        self.submission.refresh_from_db()
+        self.assertEqual(
+            self.submission.status,
+            SubmissionStatus.UNDER_PEER_REVIEW,
+        )
+
+    def test_editor_can_add_reviewer_when_under_peer_review(self):
+        SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+        )
+        self.submission.status = SubmissionStatus.UNDER_PEER_REVIEW
+        self.save_submission_without_status_notifications()
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.post(
+            reverse(
+                'submission-assign-reviewer',
+                kwargs={'pk': self.submission.pk},
+            ),
+            {
+                'reviewer_id': self.second_matching_reviewer.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            SubmissionReviewerAssignment.objects.filter(
+                submission=self.submission,
+                is_active=True,
+            ).count(),
+            2,
+        )
+
+    def test_eligible_reviewers_excludes_already_assigned_reviewers(self):
+        SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+        )
+        self.submission.status = SubmissionStatus.UNDER_PEER_REVIEW
+        self.save_submission_without_status_notifications()
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.get(
+            reverse(
+                'submission-eligible-reviewers',
+                kwargs={'pk': self.submission.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        reviewer_ids = {reviewer['id'] for reviewer in response.data}
+        self.assertNotIn(self.matching_reviewer.id, reviewer_ids)
+        self.assertIn(self.second_matching_reviewer.id, reviewer_ids)
+
+    def test_editor_cannot_assign_non_matching_reviewer(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.post(
+            reverse(
+                'submission-assign-reviewer',
+                kwargs={'pk': self.submission.pk},
+            ),
+            {
+                'reviewer_id': self.other_reviewer.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            SubmissionReviewerAssignment.objects.filter(
+                submission=self.submission,
+                reviewer=self.other_reviewer,
+            ).exists()
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_reviewer_can_accept_assignment_and_editor_is_notified(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+        )
+
+        self.client.force_authenticate(self.matching_reviewer)
+        response = self.client.post(
+            reverse(
+                'reviewer-assignment-accept',
+                kwargs={'pk': assignment.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignmentStatus.ACCEPTED,
+        )
+        self.assertIsNotNone(assignment.responded_at)
+        self.assertTrue(assignment.is_active)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.editor,
+                title='Reviewer Assignment Response',
+            ).exists()
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_reviewer_can_reject_assignment_and_editor_is_notified(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+        )
+
+        self.client.force_authenticate(self.matching_reviewer)
+        response = self.client.post(
+            reverse(
+                'reviewer-assignment-reject',
+                kwargs={'pk': assignment.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        assignment.refresh_from_db()
+        self.assertEqual(
+            assignment.status,
+            ReviewerAssignmentStatus.REJECTED,
+        )
+        self.assertIsNotNone(assignment.responded_at)
+        self.assertFalse(assignment.is_active)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.editor,
+                title='Reviewer Assignment Response',
+            ).exists()
+        )
+
+    def test_other_reviewer_cannot_answer_assignment(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+        )
+
+        self.client.force_authenticate(self.second_matching_reviewer)
+        response = self.client.post(
+            reverse(
+                'reviewer-assignment-accept',
+                kwargs={'pk': assignment.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class OverdueReviewerAssignmentNotificationTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            email='overdue-author@example.com',
+            username='overdue-author',
+            full_name='Overdue Author',
+            password='StrongPass123',
+        )
+        self.editor = User.objects.create_user(
+            email='overdue-editor@example.com',
+            username='overdue-editor',
+            full_name='Overdue Editor',
+            password='StrongPass123',
+            is_editor=True,
+        )
+        self.reviewer = User.objects.create_user(
+            email='overdue-reviewer@example.com',
+            username='overdue-reviewer',
+            full_name='Overdue Reviewer',
+            password='StrongPass123',
+            is_reviewer=True,
+        )
+        self.submission = Submission.objects.create(
+            author=self.author,
+            assigned_editor=self.editor,
+            title='Overdue Review Manuscript',
+            status=SubmissionStatus.UNDER_PEER_REVIEW,
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_command_notifies_editor_for_pending_assignment_after_three_days(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+        )
+        overdue_time = timezone.now() - timedelta(days=3, minutes=1)
+        SubmissionReviewerAssignment.objects.filter(
+            pk=assignment.pk
+        ).update(assigned_at=overdue_time)
+
+        call_command('notify_overdue_reviewer_assignments')
+
+        assignment.refresh_from_db()
+        self.assertIsNotNone(
+            assignment.reviewer_response_reminder_sent_at
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.editor,
+                title='Reviewer Response Overdue',
+            ).exists()
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_command_does_not_notify_recent_pending_assignment(self):
+        SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+        )
+
+        call_command('notify_overdue_reviewer_assignments')
+
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(
+            Notification.objects.filter(
+                user=self.editor,
+                title='Reviewer Response Overdue',
+            ).exists()
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_command_does_not_notify_same_assignment_twice(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+        )
+        overdue_time = timezone.now() - timedelta(days=3, minutes=1)
+        SubmissionReviewerAssignment.objects.filter(
+            pk=assignment.pk
+        ).update(assigned_at=overdue_time)
+
+        call_command('notify_overdue_reviewer_assignments')
+        call_command('notify_overdue_reviewer_assignments')
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.editor,
+                title='Reviewer Response Overdue',
+            ).count(),
+            1,
+        )

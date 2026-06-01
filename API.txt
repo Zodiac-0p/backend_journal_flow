@@ -20,6 +20,8 @@ NOTES
 - Most APIs require authentication because the project default permission is IsAuthenticated.
 - Master data create/update/delete requires Editorial Manager or Super Admin.
 - Master data DELETE is a soft delete: it sets is_active=false instead of removing database rows.
+- Email notifications use the configured Django EMAIL_BACKEND.
+- In development, emails are printed to the console unless EMAIL_BACKEND is changed in .env.
 
 ############################################################
 SECTION 1: ACCOUNTS API
@@ -56,7 +58,8 @@ Request:
   "expertise": "Artificial Intelligence",
   "want_to_be_reviewer": true,
   "role_choice_id": 1,
-  "discipline_ids": [1, 2]
+  "discipline_ids": [1, 2],
+  "classification_ids": [1, 2, 3, 4]
 }
 
 Minimum required fields:
@@ -64,8 +67,15 @@ Minimum required fields:
   "email": "author@example.com",
   "username": "author1",
   "full_name": "Author One",
-  "password": "StrongPass123"
+  "password": "StrongPass123",
+  "classification_ids": [1, 2, 3, 4]
 }
+
+Notes:
+- classification_ids is required during registration.
+- Select at least 4 active journal classifications.
+- Sends welcome email.
+- Creates an in-app notification.
 
 3. Login
 POST /api/accounts/login/
@@ -105,6 +115,8 @@ Expected response is generic for security:
 Notes:
 - OTP expires after PASSWORD_RESET_OTP_EXPIRY_MINUTES from .env.
 - Current throttle defaults: 3 requests/hour.
+- Sends password reset OTP email when the account exists.
+- Creates an in-app notification when the account exists.
 
 6. Reset Password
 POST /api/accounts/reset-password/
@@ -120,6 +132,8 @@ Notes:
 - OTP is 6 digits.
 - New password must pass Django password validators.
 - Current throttle defaults: 5 requests/hour.
+- Sends password reset success email.
+- Creates an in-app notification.
 
 ============================================================
 AUTHENTICATED PROFILE APIS
@@ -141,8 +155,12 @@ Request:
   "expertise": "Machine Learning, Artificial Intelligence",
   "role_choice_id": 1,
   "discipline_ids": [1, 2],
+  "classification_ids": [1, 2, 3, 4],
   "want_to_be_reviewer": true
 }
+
+Notes:
+- If classification_ids is included, select at least 4 active journal classifications.
 
 Revert reviewer flag:
 {
@@ -306,6 +324,10 @@ Classifications
 30. List Classifications
 GET /api/journals/classifications/
 
+Notes:
+- This read-only endpoint is public so the registration page can show classification choices before login.
+- Only active classifications are returned to unauthenticated users.
+
 31. Create Classification
 POST /api/journals/classifications/
 
@@ -462,7 +484,7 @@ Request example:
   "abstract": "This paper presents a data-driven control strategy...",
   "keywords": "Koopman, MPC, Microgrid, DMDc",
   "open_access": true,
-  "classification_ids": [1, 2],
+  "classification_ids": [1, 2, 3, 4],
   "funding_information": "Supported by DST India.",
   "conflict_of_interest": "No conflicts of interest.",
   "suggested_reviewers": "reviewer1@example.com, reviewer2@example.com",
@@ -550,12 +572,25 @@ Requirements:
 - title, abstract, keywords completed
 - at least one author added
 - open_access selected
-- at least one classification selected
+- at least 4 classifications selected
 - at least one additional information field completed
 - ethics_accepted true
 
+Result:
+- Active editor with the lowest active assigned submission count is assigned to assigned_editor.
+- Status changes to under_editor_review.
+- Sends status-change email to the author.
+- Creates an in-app notification for the author.
+- Sends new-submission assignment email to the assigned editor.
+- Creates an in-app notification for the assigned editor.
+
 63. Withdraw Submission
 POST /api/journals/submissions/{submission_id}/withdraw/
+
+Result:
+- Status changes to withdrawn.
+- Sends status-change email to the author.
+- Creates an in-app notification for the author.
 
 64. Resubmit Revised Manuscript
 POST /api/journals/submissions/{submission_id}/resubmit/
@@ -573,6 +608,8 @@ HTTP 400 Bad Request
 Testing note:
 - Until an editor decision API is implemented, set the submission status to minor_revision or major_revision using Django admin or Django shell before testing this endpoint.
 - On successful resubmission, the API creates a new submission version and changes the submission status back to submitted.
+- Sends status-change email to the author.
+- Creates an in-app notification for the author.
 
 Body type:
 multipart/form-data
@@ -587,6 +624,130 @@ curl.exe -X POST "http://127.0.0.1:8000/api/journals/submissions/1/resubmit/" `
   -F "manuscript_file=@C:\path\to\revised_manuscript.pdf" `
   -F "revision_notes=Updated as requested."
 
+Reviewer Assignment
+Editor, Editorial Manager, or Super Admin only.
+
+65. List Submission Selected Classifications
+GET /api/journals/submissions/{submission_id}/selected-classifications/
+
+Use this first to see which classifications were selected for the submitted article.
+
+Example response:
+[
+  {
+    "id": 1,
+    "name": "Machine Learning",
+    "is_active": true,
+    "created_at": "2026-06-01T10:00:00+05:30",
+    "updated_at": "2026-06-01T10:00:00+05:30"
+  }
+]
+
+66. List Eligible Reviewers By Classification
+GET /api/journals/submissions/{submission_id}/eligible-reviewers/
+
+Rules:
+- Submission status must be submitted, under_editor_review, or under_peer_review.
+- Reviewer must have is_reviewer=true.
+- Reviewer must be active.
+- Reviewer must share at least one active classification with the submission.
+- Submission author is excluded.
+- Already assigned active reviewers are excluded.
+
+Example response:
+[
+  {
+    "id": 5,
+    "email": "reviewer@example.com",
+    "full_name": "Reviewer One",
+    "organization": "ABC University",
+    "job_title": "Professor",
+    "expertise": "Machine Learning",
+    "classifications": [
+      {
+        "id": 1,
+        "name": "Machine Learning",
+        "is_active": true,
+        "created_at": "2026-06-01T10:00:00+05:30",
+        "updated_at": "2026-06-01T10:00:00+05:30"
+      }
+    ]
+  }
+]
+
+67. Assign Reviewer To Article
+POST /api/journals/submissions/{submission_id}/assign-reviewer/
+
+Rules:
+- Submission status must be submitted, under_editor_review, or under_peer_review.
+- Use reviewer_id to assign one reviewer, or reviewer_ids to assign multiple reviewers.
+- Each selected reviewer must belong to an active reviewer account.
+- Reviewer must match at least one selected submission classification.
+- On success, the submission status changes to under_peer_review.
+- Sends reviewer-assignment email to each newly assigned reviewer.
+- Creates an in-app notification for each newly assigned reviewer.
+- Sends status-change email to the author when status changes.
+- Creates an in-app status-change notification for the author.
+- Each reviewer assignment starts with status pending.
+
+Single reviewer request:
+{
+  "reviewer_id": 5
+}
+
+Multiple reviewer request:
+{
+  "reviewer_ids": [5, 6, 7]
+}
+
+Example response:
+[
+  {
+    "id": 1,
+    "submission": 10,
+    "reviewer": {
+      "id": 5,
+      "email": "reviewer@example.com",
+      "full_name": "Reviewer One",
+      "organization": "ABC University",
+      "job_title": "Professor",
+      "expertise": "Machine Learning",
+      "classifications": []
+    },
+    "assigned_by": 2,
+    "assigned_by_name": "Editor One",
+    "assigned_at": "2026-06-01T10:30:00+05:30",
+    "status": "pending",
+    "responded_at": null,
+    "is_active": true
+  }
+]
+
+68. Reviewer Accepts Review Assignment
+POST /api/journals/reviewer-assignments/{assignment_id}/accept/
+
+Reviewer only.
+
+Rules:
+- Only the assigned reviewer can accept the assignment.
+- Assignment status must be pending.
+- On success, assignment status changes to accepted.
+- responded_at is set.
+- Editor receives email and in-app notification.
+
+69. Reviewer Rejects Review Assignment
+POST /api/journals/reviewer-assignments/{assignment_id}/reject/
+
+Reviewer only.
+
+Rules:
+- Only the assigned reviewer can reject the assignment.
+- Assignment status must be pending.
+- On success, assignment status changes to rejected.
+- responded_at is set.
+- is_active becomes false.
+- Editor receives email and in-app notification.
+
 ############################################################
 SECTION 4: NOTIFICATIONS API
 ############################################################
@@ -594,13 +755,40 @@ SECTION 4: NOTIFICATIONS API
 BASE URL
 http://127.0.0.1:8000/api/notifications/
 
-65. List My Notifications
+Automatic Notification Events
+- User registration: welcome email and in-app notification.
+- Forgot password: OTP email and in-app notification.
+- Reset password success: success email and in-app notification.
+- Submission status changes: author email and in-app notification.
+- Final submission: least-loaded editor assignment email and in-app notification.
+- Reviewer assignment: reviewer email and in-app notification.
+- Reviewer accept/reject response: editor email and in-app notification.
+- Reviewer response overdue after 3 days: editor email and in-app notification.
+
+Scheduled Notification Command
+
+Run this command daily using cron, Windows Task Scheduler, or a background worker:
+
+python manage.py notify_overdue_reviewer_assignments
+
+Behavior:
+- Finds active reviewer assignments with status pending.
+- Only checks assignments older than 3 days by default.
+- Skips assignments that already received an overdue reminder.
+- Sends email and in-app notification to the assigned editor.
+- If assigned_editor is empty, falls back to assigned_by.
+
+Options:
+python manage.py notify_overdue_reviewer_assignments --days 3
+python manage.py notify_overdue_reviewer_assignments --dry-run
+
+70. List My Notifications
 GET /api/notifications/
 
-66. Mark Notification Read
+71. Mark Notification Read
 POST /api/notifications/{notification_id}/mark-read/
 
-67. Mark All Notifications Read
+72. Mark All Notifications Read
 POST /api/notifications/mark-all-read/
 
 ############################################################
@@ -627,6 +815,9 @@ GET/PATCH submission returns fields like:
   }
 }
 
+Notes:
+- classifications becomes true only after at least 4 active classifications are selected.
+
 ############################################################
 SECTION 6: SUGGESTED ONE-BY-ONE TESTING ORDER
 ############################################################
@@ -634,18 +825,18 @@ SECTION 6: SUGGESTED ONE-BY-ONE TESTING ORDER
 1. Login as existing admin/editorial manager, or create one in Django admin.
 2. Create role choices.
 3. Create disciplines.
-4. Register an author.
-5. Login as author and save access/refresh tokens.
-6. Get profile.
-7. Update profile.
-8. Test forgot password.
-9. Test reset password with received OTP.
-10. Login again with the new password.
-11. Login as admin/editorial manager.
-12. List users.
-13. Toggle reviewer status for a user.
-14. Create article types.
-15. Create classifications.
+4. Create at least 4 classifications.
+5. Register an author using at least 4 classification_ids.
+6. Login as author and save access/refresh tokens.
+7. Get profile.
+8. Update profile.
+9. Test forgot password.
+10. Test reset password with received OTP.
+11. Login again with the new password.
+12. Login as admin/editorial manager.
+13. List users.
+14. Toggle reviewer status for a user.
+15. Create article types.
 16. Create contributor roles.
 17. Create submission file types.
 18. Login as author.
@@ -654,16 +845,22 @@ SECTION 6: SUGGESTED ONE-BY-ONE TESTING ORDER
 21. Add submission author.
 22. Patch title, abstract, and keywords.
 23. Patch open_access.
-24. Patch classification_ids.
+24. Patch classification_ids with at least 4 classification IDs.
 25. Patch additional information.
 26. Patch ethics_accepted.
 27. Final submit manuscript.
-28. Withdraw submission if needed.
-29. For resubmission testing, set the submission status to minor_revision or major_revision in Django admin/shell.
-30. Resubmit revised manuscript.
-31. List notifications.
-32. Mark one notification read.
-33. Mark all notifications read.
+28. Login as editor/editorial manager/super admin.
+29. List submission selected classifications.
+30. List eligible reviewers filtered by selected classifications.
+31. Assign a matching reviewer.
+32. Login as reviewer.
+33. Accept or reject the review assignment.
+34. Withdraw submission if needed.
+35. For resubmission testing, set the submission status to minor_revision or major_revision in Django admin/shell.
+36. Resubmit revised manuscript.
+37. List notifications.
+38. Mark one notification read.
+39. Mark all notifications read.
 
 ############################################################
 SECTION 7: USER ROLES

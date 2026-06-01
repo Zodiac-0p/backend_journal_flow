@@ -1,7 +1,7 @@
-import os
-
 from django.conf import settings
 from django.db import models
+
+MIN_CLASSIFICATIONS_REQUIRED = 4
 
 
 class ArticleType(models.Model):
@@ -102,11 +102,24 @@ class SubmissionStatus(models.TextChoices):
     PUBLISHED = 'published', 'Published'
 
 
+class ReviewerAssignmentStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    ACCEPTED = 'accepted', 'Accepted'
+    REJECTED = 'rejected', 'Rejected'
+
+
 class Submission(models.Model):
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='submissions'
+    )
+    assigned_editor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_editor_submissions'
     )
 
     # Step 1
@@ -183,7 +196,10 @@ class Submission(models.Model):
 
             'open_access': self.open_access is not None,
 
-            'classifications': self.classifications.exists(),
+            'classifications': (
+                self.classifications.filter(is_active=True).count()
+                >= MIN_CLASSIFICATIONS_REQUIRED
+            ),
 
             'additional_information': bool(
                 self.funding_information or
@@ -336,3 +352,47 @@ class SubmissionVersion(models.Model):
 
     def __str__(self):
         return f'{self.submission} - v{self.version_number}'
+
+
+class SubmissionReviewerAssignment(models.Model):
+    submission = models.ForeignKey(
+        Submission,
+        on_delete=models.CASCADE,
+        related_name='reviewer_assignments'
+    )
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='review_assignments'
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_reviewers'
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=ReviewerAssignmentStatus.choices,
+        default=ReviewerAssignmentStatus.PENDING
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
+    reviewer_response_reminder_sent_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-assigned_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['submission', 'reviewer'],
+                name='unique_reviewer_assignment_per_submission'
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.submission} -> {self.reviewer}'

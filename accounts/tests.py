@@ -1,7 +1,11 @@
 from django.urls import reverse
+from django.core import mail
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from journals.models import Classification
+from user_notifications.models import Notification
 from .models import Discipline, RoleChoice, User
 
 
@@ -54,4 +58,81 @@ class AccountMasterDataSoftDeleteTests(APITestCase):
         self.assertFalse(discipline.is_active)
         self.assertTrue(
             self.author.disciplines.filter(pk=discipline.pk).exists()
+        )
+
+
+class AccountClassificationSelectionTests(APITestCase):
+    def setUp(self):
+        self.classifications = [
+            Classification.objects.create(name=f'Classification {index}')
+            for index in range(1, 5)
+        ]
+
+    def test_register_requires_at_least_four_classifications(self):
+        response = self.client.post(
+            reverse('register'),
+            {
+                'email': 'new-author@example.com',
+                'username': 'new-author',
+                'full_name': 'New Author',
+                'password': 'StrongPass123',
+                'classification_ids': [
+                    classification.id
+                    for classification in self.classifications[:3]
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_saves_four_classifications(self):
+        response = self.client.post(
+            reverse('register'),
+            {
+                'email': 'new-author@example.com',
+                'username': 'new-author',
+                'full_name': 'New Author',
+                'password': 'StrongPass123',
+                'classification_ids': [
+                    classification.id
+                    for classification in self.classifications
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(email='new-author@example.com')
+        self.assertEqual(user.classifications.count(), 4)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_register_sends_email_and_creates_notification(self):
+        response = self.client.post(
+            reverse('register'),
+            {
+                'email': 'notified-author@example.com',
+                'username': 'notified-author',
+                'full_name': 'Notified Author',
+                'password': 'StrongPass123',
+                'classification_ids': [
+                    classification.id
+                    for classification in self.classifications
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(email='notified-author@example.com')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=user,
+                title='Welcome to Publication Manager',
+            ).exists()
         )

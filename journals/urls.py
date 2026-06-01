@@ -11,6 +11,8 @@ from .views import (
     SubmissionFileTypeViewSet,
     SubmissionFileListCreateView,
     SubmissionFileDetailView,
+    AcceptReviewerAssignmentView,
+    RejectReviewerAssignmentView,
 )
 
 router = DefaultRouter()
@@ -49,6 +51,16 @@ urlpatterns = [
         'submission-files/<int:pk>/',
         SubmissionFileDetailView.as_view(),
         name='submission-file-detail',
+    ),
+    path(
+        'reviewer-assignments/<int:pk>/accept/',
+        AcceptReviewerAssignmentView.as_view(),
+        name='reviewer-assignment-accept',
+    ),
+    path(
+        'reviewer-assignments/<int:pk>/reject/',
+        RejectReviewerAssignmentView.as_view(),
+        name='reviewer-assignment-reject',
     ),
 ]
 

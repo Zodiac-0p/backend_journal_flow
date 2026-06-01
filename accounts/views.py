@@ -12,6 +12,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 import secrets
 
 from .utils import send_reset_password_email
+from user_notifications.utils import notify_user
 from .models import RoleChoice, Discipline
 from .permissions import IsEditorialManagerOrSuperAdmin
 from .serializers import (
@@ -358,6 +359,15 @@ class ResetPasswordView(APIView):
                 'reset_password_otp',
                 'reset_password_otp_created_at',
             ]
+        )
+
+        notify_user(
+            user=user,
+            title='Password Reset Successful',
+            message=(
+                'Your Publication Manager password was reset successfully.'
+            ),
+            notification_type='system',
         )
 
         return Response({

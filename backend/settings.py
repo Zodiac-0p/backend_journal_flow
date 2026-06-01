@@ -74,10 +74,9 @@ INSTALLED_APPS = [
     'corsheaders',
 
     # Local Apps
-    'accounts',
-    'journals',
-    'user_notifications',
-    'auditlog',
+    'accounts.apps.AccountsConfig',
+    'journals.apps.JournalsConfig',
+    'user_notifications.apps.UserNotificationsConfig',
 ]
 
 # ------------------------------------------------------------------------------

@@ -9,6 +9,7 @@ from .models import (
     SubmissionAuthor,
     SubmissionFileType,
     SubmissionFile,
+    SubmissionReviewerAssignment,
 )
 
 
@@ -134,6 +135,29 @@ class SubmissionFileInline(admin.TabularInline):
     )
 
 
+class SubmissionReviewerAssignmentInline(admin.TabularInline):
+    model = SubmissionReviewerAssignment
+    extra = 0
+    fields = (
+        'reviewer',
+        'assigned_by',
+        'assigned_at',
+        'status',
+        'responded_at',
+        'reviewer_response_reminder_sent_at',
+        'is_active',
+    )
+    readonly_fields = (
+        'assigned_at',
+        'responded_at',
+        'reviewer_response_reminder_sent_at',
+    )
+    autocomplete_fields = (
+        'reviewer',
+        'assigned_by',
+    )
+
+
 # ==================================================
 # SUBMISSION ADMIN
 # ==================================================
@@ -144,13 +168,17 @@ class SubmissionAdmin(admin.ModelAdmin):
         'id',
         'title',
         'author',
+        'assigned_editor',
         'article_type',
         'status',
+        'classification_count',
+        'active_reviewer_assignment_count',
         'created_at',
         'submitted_at',
     )
     list_filter = (
         'status',
+        'assigned_editor',
         'article_type',
         'created_at',
     )
@@ -158,6 +186,12 @@ class SubmissionAdmin(admin.ModelAdmin):
         'title',
         'author__email',
         'author__full_name',
+        'assigned_editor__email',
+        'assigned_editor__full_name',
+    )
+    autocomplete_fields = (
+        'author',
+        'assigned_editor',
     )
     ordering = (
         '-created_at',
@@ -168,7 +202,16 @@ class SubmissionAdmin(admin.ModelAdmin):
     inlines = [
         SubmissionAuthorInline,
         SubmissionFileInline,
+        SubmissionReviewerAssignmentInline,
     ]
+
+    def classification_count(self, obj):
+        return obj.classifications.count()
+    classification_count.short_description = 'Classifications'
+
+    def active_reviewer_assignment_count(self, obj):
+        return obj.reviewer_assignments.filter(is_active=True).count()
+    active_reviewer_assignment_count.short_description = 'Active Reviewers'
 
 
 @admin.register(SubmissionAuthor)
@@ -241,4 +284,37 @@ class SubmissionVersionAdmin(admin.ModelAdmin):
     )
     ordering = (
         '-created_at',
+    )
+
+
+@admin.register(SubmissionReviewerAssignment)
+class SubmissionReviewerAssignmentAdmin(admin.ModelAdmin):
+    list_display = (
+        'submission',
+        'reviewer',
+        'assigned_by',
+        'assigned_at',
+        'status',
+        'responded_at',
+        'reviewer_response_reminder_sent_at',
+        'is_active',
+    )
+    list_filter = (
+        'status',
+        'is_active',
+        'assigned_at',
+    )
+    search_fields = (
+        'submission__title',
+        'reviewer__email',
+        'reviewer__full_name',
+        'assigned_by__email',
+    )
+    ordering = (
+        '-assigned_at',
+    )
+    autocomplete_fields = (
+        'submission',
+        'reviewer',
+        'assigned_by',
     )

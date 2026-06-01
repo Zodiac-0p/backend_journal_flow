@@ -112,6 +112,13 @@ class User(AbstractUser):
         related_name='users'
     )
 
+    # Journal classifications selected by the user during onboarding/profile.
+    classifications = models.ManyToManyField(
+        'journals.Classification',
+        blank=True,
+        related_name='users'
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
