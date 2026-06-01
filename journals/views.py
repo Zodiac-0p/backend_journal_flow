@@ -2,8 +2,8 @@ from rest_framework import status, viewsets, generics
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.shortcuts import get_object_or_404
 
 from .models import (
     ArticleType,
@@ -32,12 +32,34 @@ from .serializers import (
 )
 
 
+def accessible_submissions_for(user):
+    queryset = Submission.objects.select_related(
+        'author',
+        'article_type',
+    )
+
+    if (
+        user.is_super_admin
+        or user.is_editorial_manager
+        or user.is_editor
+    ):
+        return queryset
+
+    return queryset.filter(author=user)
+
+
 # ==================================================
 # MASTER DATA VIEWSETS
 # ==================================================
 
 
-class ArticleTypeViewSet(viewsets.ModelViewSet):
+class SoftDeleteModelViewSet(viewsets.ModelViewSet):
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
+
+
+class ArticleTypeViewSet(SoftDeleteModelViewSet):
     serializer_class = ArticleTypeSerializer
 
     def get_queryset(self):
@@ -56,7 +78,7 @@ class ArticleTypeViewSet(viewsets.ModelViewSet):
         return [IsEditorialManagerOrSuperAdmin()]
 
 
-class ClassificationViewSet(viewsets.ModelViewSet):
+class ClassificationViewSet(SoftDeleteModelViewSet):
     serializer_class = ClassificationSerializer
 
     def get_queryset(self):
@@ -77,7 +99,7 @@ class ClassificationViewSet(viewsets.ModelViewSet):
         return [IsEditorialManagerOrSuperAdmin()]
 
 
-class ContributorRoleViewSet(viewsets.ModelViewSet):
+class ContributorRoleViewSet(SoftDeleteModelViewSet):
     serializer_class = ContributorRoleSerializer
 
     def get_queryset(self):
@@ -96,7 +118,7 @@ class ContributorRoleViewSet(viewsets.ModelViewSet):
         return [IsEditorialManagerOrSuperAdmin()]
 
 
-class SubmissionFileTypeViewSet(viewsets.ModelViewSet):
+class SubmissionFileTypeViewSet(SoftDeleteModelViewSet):
     serializer_class = SubmissionFileTypeSerializer
 
     def get_queryset(self):
@@ -123,26 +145,14 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = SubmissionSerializer
 
     def get_queryset(self):
-        user = self.request.user
-
-        queryset = Submission.objects.select_related(
-            'author',
-            'article_type',
+        return accessible_submissions_for(
+            self.request.user
         ).prefetch_related(
             'classifications',
             'versions',
             'authors__contributor_roles',
             'submission_files__file_type',
         )
-
-        if (
-            user.is_super_admin
-            or user.is_editorial_manager
-            or user.is_editor
-        ):
-            return queryset
-
-        return queryset.filter(author=user)
 
     def get_permissions(self):
         if self.action in ['list', 'create']:
@@ -183,6 +193,20 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     def resubmit(self, request, pk=None):
         submission = self.get_object()
 
+        if submission.status not in [
+            SubmissionStatus.MINOR_REVISION,
+            SubmissionStatus.MAJOR_REVISION,
+        ]:
+            return Response(
+                {
+                    'detail': (
+                        'Only submissions requiring minor or major revision '
+                        'can be resubmitted.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = ResubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(submission=submission, user=request.user)
@@ -206,19 +230,10 @@ class SubmissionFileListCreateView(generics.ListCreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_submission(self):
-        submission = Submission.objects.get(
-            id=self.kwargs['submission_id']
+        return get_object_or_404(
+            accessible_submissions_for(self.request.user),
+            id=self.kwargs['submission_id'],
         )
-
-        if (
-            submission.author != self.request.user
-            and not self.request.user.is_editor
-            and not self.request.user.is_editorial_manager
-            and not self.request.user.is_super_admin
-        ):
-            raise PermissionDenied('Permission denied.')
-
-        return submission
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -246,8 +261,11 @@ class SubmissionFileDetailView(generics.RetrieveDestroyAPIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
-        return SubmissionFile.objects.select_related(
+        return SubmissionFile.objects.filter(
+            submission__in=accessible_submissions_for(self.request.user)
+        ).select_related(
             'submission',
+            'submission__author',
             'file_type',
             'uploaded_by',
         )
@@ -262,19 +280,10 @@ class SubmissionAuthorListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_submission(self):
-        submission = Submission.objects.get(
-            id=self.kwargs['submission_id']
+        return get_object_or_404(
+            accessible_submissions_for(self.request.user),
+            id=self.kwargs['submission_id'],
         )
-
-        if (
-            submission.author != self.request.user
-            and not self.request.user.is_editor
-            and not self.request.user.is_editorial_manager
-            and not self.request.user.is_super_admin
-        ):
-            raise PermissionDenied('Permission denied.')
-
-        return submission
 
     def get_queryset(self):
         submission = self.get_submission()
@@ -300,8 +309,11 @@ class SubmissionAuthorDetailView(
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return SubmissionAuthor.objects.select_related(
-            'submission'
+        return SubmissionAuthor.objects.filter(
+            submission__in=accessible_submissions_for(self.request.user)
+        ).select_related(
+            'submission',
+            'submission__author',
         ).prefetch_related(
             'contributor_roles'
         )

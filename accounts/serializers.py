@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -13,7 +15,10 @@ User = get_user_model()
 class RoleChoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoleChoice
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'is_active']
+        extra_kwargs = {
+            'is_active': {'required': False},
+        }
 
 
 # ----------------------------------------------------------------------
@@ -22,7 +27,10 @@ class RoleChoiceSerializer(serializers.ModelSerializer):
 class DisciplineSerializer(serializers.ModelSerializer):
     class Meta:
         model = Discipline
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'is_active']
+        extra_kwargs = {
+            'is_active': {'required': False},
+        }
 
 
 # ----------------------------------------------------------------------
@@ -232,3 +240,30 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 # ----------------------------------------------------------------------
 class EmailCheckSerializer(serializers.Serializer):
     email = serializers.EmailField()
+
+
+# ----------------------------------------------------------------------
+# Password Reset Serializers
+# ----------------------------------------------------------------------
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    otp = serializers.CharField(
+        max_length=6,
+    )
+
+    new_password = serializers.CharField(
+        min_length=8,
+        write_only=True,
+    )
+
+    def validate_new_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value

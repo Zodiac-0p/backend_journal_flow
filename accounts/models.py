@@ -116,6 +116,17 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    reset_password_otp = models.CharField(
+        max_length=128,
+        blank=True,
+        null=True,
+    )
+
+    reset_password_otp_created_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
+    
     # Authentication Settings
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'full_name']

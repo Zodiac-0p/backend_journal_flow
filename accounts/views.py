@@ -1,11 +1,17 @@
 from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
+from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+import secrets
 
+from .utils import send_reset_password_email
 from .models import RoleChoice, Discipline
 from .permissions import IsEditorialManagerOrSuperAdmin
 from .serializers import (
@@ -17,9 +23,17 @@ from .serializers import (
     RoleChoiceSerializer,
     DisciplineSerializer,
     UserListSerializer,
+    ForgotPasswordSerializer,
+    ResetPasswordSerializer,
 )
 
 User = get_user_model()
+
+
+class SoftDeleteModelViewSet(viewsets.ModelViewSet):
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
 
 
 # ----------------------------------------------------------------------
@@ -190,9 +204,17 @@ class PromoteToReviewerView(APIView):
 # List: any authenticated user
 # Create/Update/Delete: Editorial Manager or Super Admin
 # ----------------------------------------------------------------------
-class RoleChoiceViewSet(viewsets.ModelViewSet):
-    queryset = RoleChoice.objects.filter(is_active=True)
+class RoleChoiceViewSet(SoftDeleteModelViewSet):
     serializer_class = RoleChoiceSerializer
+
+    def get_queryset(self):
+        if (
+            self.request.user.is_editorial_manager
+            or self.request.user.is_super_admin
+        ):
+            return RoleChoice.objects.all()
+
+        return RoleChoice.objects.filter(is_active=True)
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -205,11 +227,139 @@ class RoleChoiceViewSet(viewsets.ModelViewSet):
 # List: any authenticated user
 # Create/Update/Delete: Editorial Manager or Super Admin
 # ----------------------------------------------------------------------
-class DisciplineViewSet(viewsets.ModelViewSet):
-    queryset = Discipline.objects.filter(is_active=True)
+class DisciplineViewSet(SoftDeleteModelViewSet):
     serializer_class = DisciplineSerializer
+
+    def get_queryset(self):
+        if (
+            self.request.user.is_editorial_manager
+            or self.request.user.is_super_admin
+        ):
+            return Discipline.objects.all()
+
+        return Discipline.objects.filter(is_active=True)
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             return [IsAuthenticated()]
         return [IsEditorialManagerOrSuperAdmin()]
+
+
+# ----------------------------------------------------------------------
+# Password reset
+# ----------------------------------------------------------------------
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(
+            data=request.data
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email'].lower().strip()
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+
+        if user:
+            otp = f'{secrets.randbelow(900000) + 100000}'
+
+            user.reset_password_otp = make_password(otp)
+            user.reset_password_otp_created_at = timezone.now()
+
+            user.save(
+                update_fields=[
+                    'reset_password_otp',
+                    'reset_password_otp_created_at',
+                ]
+            )
+
+            send_reset_password_email(user, otp)
+
+        return Response({
+            'message': (
+                'If an account exists for this email, an OTP has been sent.'
+            )
+        })
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_confirm'
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(
+            data=request.data
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email'].lower().strip()
+        otp = serializer.validated_data['otp']
+        new_password = serializer.validated_data['new_password']
+
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+
+        if (
+            not user
+            or not user.reset_password_otp
+            or not user.reset_password_otp_created_at
+        ):
+            return Response(
+                {
+                    'error': 'Invalid or expired OTP.'
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        expires_at = (
+            user.reset_password_otp_created_at
+            + timezone.timedelta(
+                minutes=settings.PASSWORD_RESET_OTP_EXPIRY_MINUTES
+            )
+        )
+
+        if timezone.now() > expires_at:
+            user.reset_password_otp = None
+            user.reset_password_otp_created_at = None
+            user.save(
+                update_fields=[
+                    'reset_password_otp',
+                    'reset_password_otp_created_at',
+                ]
+            )
+
+            return Response(
+                {
+                    'error': 'Invalid or expired OTP.'
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not check_password(otp, user.reset_password_otp):
+            return Response(
+                {
+                    'error': 'Invalid or expired OTP.'
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+
+        user.reset_password_otp = None
+        user.reset_password_otp_created_at = None
+
+        user.save(
+            update_fields=[
+                'password',
+                'reset_password_otp',
+                'reset_password_otp_created_at',
+            ]
+        )
+
+        return Response({
+            'message': 'Password reset successful.'
+        })

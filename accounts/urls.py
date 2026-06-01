@@ -11,6 +11,8 @@ from .views import (
     RoleChoiceViewSet,
     DisciplineViewSet,
     UserListView,
+    ForgotPasswordView,
+    ResetPasswordView,
 )
 
 # Router for Role Choices and Disciplines
@@ -30,6 +32,18 @@ urlpatterns = [
     path('users/', UserListView.as_view(), name='user_list'),
     # Promote any existing user to reviewer
     path('users/<int:user_id>/make-reviewer/', PromoteToReviewerView.as_view(), name='make_reviewer'),
+
+    path(
+        'forgot-password/',
+        ForgotPasswordView.as_view(),
+        name='forgot-password',
+    ),
+
+    path(
+        'reset-password/',
+        ResetPasswordView.as_view(),
+        name='reset-password',
+    ),
 ]
 
 # Append router-generated endpoints
