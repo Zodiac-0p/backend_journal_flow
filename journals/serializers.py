@@ -505,11 +505,104 @@ class SubmissionSerializer(serializers.ModelSerializer):
 # --------------------------------------------------
 
 class SubmitSubmissionSerializer(serializers.Serializer):
-    def save(self, submission):
-        if not submission.is_ready_to_submit:
-            raise serializers.ValidationError(
-                'Complete all required sections and accept the ethics policy.'
+    def get_missing_requirements(self, submission):
+        missing_requirements = {}
+
+        if not submission.article_type_id:
+            missing_requirements['article_type'] = (
+                'Select an article type.'
             )
+
+        required_file_types = SubmissionFileType.objects.filter(
+            is_required=True,
+            is_active=True,
+        )
+        uploaded_required_file_type_ids = set(
+            submission.submission_files.filter(
+                file_type__is_required=True,
+                file_type__is_active=True,
+            ).values_list('file_type_id', flat=True)
+        )
+        missing_file_types = list(
+            required_file_types.exclude(
+                id__in=uploaded_required_file_type_ids
+            ).values_list('name', flat=True)
+        )
+        if missing_file_types:
+            missing_requirements['submission_files'] = {
+                'message': 'Upload all required submission files.',
+                'missing_file_types': missing_file_types,
+            }
+
+        missing_text_fields = [
+            field_name
+            for field_name in ['title', 'abstract', 'keywords']
+            if not getattr(submission, field_name)
+        ]
+        if missing_text_fields:
+            missing_requirements['title_abstract_keywords'] = {
+                'message': 'Complete title, abstract, and keywords.',
+                'missing_fields': missing_text_fields,
+            }
+
+        if not submission.authors.exists():
+            missing_requirements['author_details'] = (
+                'Add at least one author.'
+            )
+
+        if submission.open_access is None:
+            missing_requirements['open_access'] = (
+                'Select an open access option.'
+            )
+
+        active_classification_count = submission.classifications.filter(
+            is_active=True
+        ).count()
+        if active_classification_count < MIN_CLASSIFICATIONS_REQUIRED:
+            missing_requirements['classifications'] = {
+                'message': (
+                    f'Select at least {MIN_CLASSIFICATIONS_REQUIRED} active '
+                    'classifications.'
+                ),
+                'selected_count': active_classification_count,
+                'required_count': MIN_CLASSIFICATIONS_REQUIRED,
+            }
+
+        if not any([
+            submission.funding_information,
+            submission.conflict_of_interest,
+            submission.suggested_reviewers,
+            submission.additional_notes,
+        ]):
+            missing_requirements['additional_information'] = {
+                'message': (
+                    'Complete at least one additional information field.'
+                ),
+                'accepted_fields': [
+                    'funding_information',
+                    'conflict_of_interest',
+                    'suggested_reviewers',
+                    'additional_notes',
+                ],
+            }
+
+        if not submission.ethics_accepted:
+            missing_requirements['ethics_accepted'] = (
+                'Accept the ethics policy before final submission.'
+            )
+
+        return missing_requirements
+
+    def save(self, submission):
+        missing_requirements = self.get_missing_requirements(submission)
+
+        if missing_requirements:
+            raise serializers.ValidationError({
+                'detail': (
+                    'Complete all required fields before final submission.'
+                ),
+                'missing_requirements': missing_requirements,
+            })
 
         active_statuses = [
             SubmissionStatus.UNDER_EDITOR_REVIEW,

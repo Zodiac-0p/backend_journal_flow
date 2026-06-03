@@ -353,6 +353,82 @@ class ClassificationPublicReadTests(APITestCase):
 
 
 class SubmissionEditorAutoAssignmentTests(APITestCase):
+    def test_submit_returns_missing_requirements_for_incomplete_submission(self):
+        author = User.objects.create_user(
+            email='incomplete-submit-author@example.com',
+            username='incomplete-submit-author',
+            full_name='Incomplete Submit Author',
+            password='StrongPass123',
+        )
+        editor = User.objects.create_user(
+            email='available-editor@example.com',
+            username='available-editor',
+            full_name='Available Editor',
+            password='StrongPass123',
+            is_editor=True,
+        )
+        submission = Submission.objects.create(
+            author=author,
+            title='',
+        )
+
+        self.client.force_authenticate(author)
+        response = self.client.post(
+            reverse('submission-submit', kwargs={'pk': submission.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data['detail'],
+            'Complete all required fields before final submission.',
+        )
+        self.assertIn('missing_requirements', response.data)
+
+        missing_requirements = response.data['missing_requirements']
+        self.assertEqual(
+            missing_requirements['article_type'],
+            'Select an article type.',
+        )
+        self.assertEqual(
+            missing_requirements['author_details'],
+            'Add at least one author.',
+        )
+        self.assertEqual(
+            missing_requirements['open_access'],
+            'Select an open access option.',
+        )
+        self.assertEqual(
+            missing_requirements['ethics_accepted'],
+            'Accept the ethics policy before final submission.',
+        )
+        self.assertEqual(
+            missing_requirements['title_abstract_keywords'][
+                'missing_fields'
+            ],
+            ['title', 'abstract', 'keywords'],
+        )
+        self.assertEqual(
+            missing_requirements['classifications']['selected_count'],
+            0,
+        )
+        self.assertEqual(
+            missing_requirements['classifications']['required_count'],
+            4,
+        )
+        self.assertEqual(
+            missing_requirements['additional_information'][
+                'accepted_fields'
+            ],
+            [
+                'funding_information',
+                'conflict_of_interest',
+                'suggested_reviewers',
+                'additional_notes',
+            ],
+        )
+        self.assertNotIn('submission_files', missing_requirements)
+        self.assertEqual(editor.assigned_editor_submissions.count(), 0)
+
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
     )

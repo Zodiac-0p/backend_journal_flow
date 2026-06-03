@@ -584,6 +584,40 @@ Result:
 - Sends new-submission assignment email to the assigned editor.
 - Creates an in-app notification for the assigned editor.
 
+If required data is missing, the API returns:
+HTTP 400 Bad Request
+{
+  "detail": "Complete all required fields before final submission.",
+  "missing_requirements": {
+    "article_type": "Select an article type.",
+    "submission_files": {
+      "message": "Upload all required submission files.",
+      "missing_file_types": ["Manuscript"]
+    },
+    "title_abstract_keywords": {
+      "message": "Complete title, abstract, and keywords.",
+      "missing_fields": ["title", "abstract", "keywords"]
+    },
+    "author_details": "Add at least one author.",
+    "open_access": "Select an open access option.",
+    "classifications": {
+      "message": "Select at least 4 active classifications.",
+      "selected_count": 2,
+      "required_count": 4
+    },
+    "additional_information": {
+      "message": "Complete at least one additional information field.",
+      "accepted_fields": [
+        "funding_information",
+        "conflict_of_interest",
+        "suggested_reviewers",
+        "additional_notes"
+      ]
+    },
+    "ethics_accepted": "Accept the ethics policy before final submission."
+  }
+}
+
 63. Withdraw Submission
 POST /api/journals/submissions/{submission_id}/withdraw/
 

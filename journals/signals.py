@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 
@@ -32,12 +33,14 @@ def notify_author_on_submission_status_change(
 
     status_label = instance.get_status_display()
 
-    notify_user(
-        user=instance.author,
-        title='Submission Status Updated',
-        message=(
-            f'Your submission "{instance.title or instance}" status changed '
-            f'to {status_label}.'
-        ),
-        notification_type='submission',
+    transaction.on_commit(
+        lambda: notify_user(
+            user=instance.author,
+            title='Submission Status Updated',
+            message=(
+                f'Your submission "{instance.title or instance}" status '
+                f'changed to {status_label}.'
+            ),
+            notification_type='submission',
+        )
     )
