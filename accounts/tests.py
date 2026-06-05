@@ -61,6 +61,59 @@ class AccountMasterDataSoftDeleteTests(APITestCase):
         )
 
 
+class PromoteReviewerTests(APITestCase):
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            email='manager@example.com',
+            username='manager',
+            full_name='Manager User',
+            password='StrongPass123',
+            is_editorial_manager=True,
+        )
+        self.author = User.objects.create_user(
+            email='author@example.com',
+            username='author',
+            full_name='Author User',
+            password='StrongPass123',
+        )
+        self.classifications = [
+            Classification.objects.create(name=f'Classification {index}')
+            for index in range(1, 5)
+        ]
+
+    def test_manager_cannot_promote_author_without_classifications(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.post(
+            reverse(
+                'make_reviewer',
+                kwargs={'user_id': self.author.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data['detail'],
+            'User must have at least 4 active classifications before '
+            'becoming a reviewer.',
+        )
+
+    def test_manager_can_promote_author_with_four_classifications(self):
+        self.author.classifications.set(self.classifications)
+
+        self.client.force_authenticate(self.manager)
+        response = self.client.post(
+            reverse(
+                'make_reviewer',
+                kwargs={'user_id': self.author.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.author.refresh_from_db()
+        self.assertTrue(self.author.is_reviewer)
+
+
 class AccountClassificationSelectionTests(APITestCase):
     def setUp(self):
         self.classifications = [
@@ -68,7 +121,7 @@ class AccountClassificationSelectionTests(APITestCase):
             for index in range(1, 5)
         ]
 
-    def test_register_requires_at_least_four_classifications(self):
+    def test_register_author_does_not_require_classifications(self):
         response = self.client.post(
             reverse('register'),
             {
@@ -76,6 +129,41 @@ class AccountClassificationSelectionTests(APITestCase):
                 'username': 'new-author',
                 'full_name': 'New Author',
                 'password': 'StrongPass123',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(email='new-author@example.com')
+        self.assertFalse(user.is_reviewer)
+        self.assertEqual(user.classifications.count(), 0)
+
+    def test_register_reviewer_requires_classifications(self):
+        response = self.client.post(
+            reverse('register'),
+            {
+                'email': 'new-reviewer@example.com',
+                'username': 'new-reviewer',
+                'full_name': 'New Reviewer',
+                'password': 'StrongPass123',
+                'want_to_be_reviewer': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('classification_ids', response.data)
+
+    def test_register_reviewer_requires_at_least_four_classifications(self):
+        response = self.client.post(
+            reverse('register'),
+            {
+                'email': 'new-reviewer@example.com',
+                'username': 'new-reviewer',
+                'full_name': 'New Reviewer',
+                'password': 'StrongPass123',
+                'want_to_be_reviewer': True,
                 'classification_ids': [
                     classification.id
                     for classification in self.classifications[:3]
@@ -86,14 +174,15 @@ class AccountClassificationSelectionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_register_saves_four_classifications(self):
+    def test_register_reviewer_saves_four_classifications(self):
         response = self.client.post(
             reverse('register'),
             {
-                'email': 'new-author@example.com',
-                'username': 'new-author',
-                'full_name': 'New Author',
+                'email': 'new-reviewer@example.com',
+                'username': 'new-reviewer',
+                'full_name': 'New Reviewer',
                 'password': 'StrongPass123',
+                'want_to_be_reviewer': True,
                 'classification_ids': [
                     classification.id
                     for classification in self.classifications
@@ -104,7 +193,55 @@ class AccountClassificationSelectionTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        user = User.objects.get(email='new-author@example.com')
+        user = User.objects.get(email='new-reviewer@example.com')
+        self.assertTrue(user.is_reviewer)
+        self.assertEqual(user.classifications.count(), 4)
+
+    def test_profile_update_requires_classifications_when_becoming_reviewer(self):
+        user = User.objects.create_user(
+            email='author@example.com',
+            username='author',
+            full_name='Author User',
+            password='StrongPass123',
+        )
+
+        self.client.force_authenticate(user)
+        response = self.client.patch(
+            reverse('profile'),
+            {
+                'want_to_be_reviewer': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('classification_ids', response.data)
+
+    def test_profile_update_can_become_reviewer_with_four_classifications(self):
+        user = User.objects.create_user(
+            email='author@example.com',
+            username='author',
+            full_name='Author User',
+            password='StrongPass123',
+        )
+
+        self.client.force_authenticate(user)
+        response = self.client.patch(
+            reverse('profile'),
+            {
+                'want_to_be_reviewer': True,
+                'classification_ids': [
+                    classification.id
+                    for classification in self.classifications
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_reviewer)
         self.assertEqual(user.classifications.count(), 4)
 
     @override_settings(
@@ -118,10 +255,6 @@ class AccountClassificationSelectionTests(APITestCase):
                 'username': 'notified-author',
                 'full_name': 'Notified Author',
                 'password': 'StrongPass123',
-                'classification_ids': [
-                    classification.id
-                    for classification in self.classifications
-                ],
             },
             format='json',
         )

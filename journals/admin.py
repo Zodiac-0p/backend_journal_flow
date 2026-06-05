@@ -10,6 +10,7 @@ from .models import (
     SubmissionFileType,
     SubmissionFile,
     SubmissionReviewerAssignment,
+    SubmissionReviewerReport,
 )
 
 
@@ -317,4 +318,30 @@ class SubmissionReviewerAssignmentAdmin(admin.ModelAdmin):
         'submission',
         'reviewer',
         'assigned_by',
+    )
+
+
+@admin.register(SubmissionReviewerReport)
+class SubmissionReviewerReportAdmin(admin.ModelAdmin):
+    list_display = (
+        'assignment',
+        'recommendation',
+        'review_report_complete',
+        'ready_to_transfer_to_editor',
+        'submitted_at',
+        'updated_at',
+    )
+    list_filter = (
+        'review_report_complete',
+        'ready_to_transfer_to_editor',
+        'recommendation',
+        'submitted_at',
+    )
+    search_fields = (
+        'assignment__submission__title',
+        'assignment__reviewer__email',
+        'assignment__reviewer__full_name',
+    )
+    autocomplete_fields = (
+        'assignment',
     )

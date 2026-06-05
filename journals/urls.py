@@ -13,6 +13,13 @@ from .views import (
     SubmissionFileDetailView,
     AcceptReviewerAssignmentView,
     RejectReviewerAssignmentView,
+    ReviewerPendingAssignmentListView,
+    ReviewerAcceptedAssignmentListView,
+    ReviewerAssignmentDetailView,
+    ReviewerSubmitReportView,
+    SubmissionReviewReportListView,
+    EditorReviewReportListView,
+    SubmissionEditorDecisionView,
 )
 
 router = DefaultRouter()
@@ -58,9 +65,44 @@ urlpatterns = [
         name='reviewer-assignment-accept',
     ),
     path(
+        'reviewer-assignments/pending/',
+        ReviewerPendingAssignmentListView.as_view(),
+        name='reviewer-assignment-pending-list',
+    ),
+    path(
+        'reviewer-assignments/accepted/',
+        ReviewerAcceptedAssignmentListView.as_view(),
+        name='reviewer-assignment-accepted-list',
+    ),
+    path(
+        'reviewer-assignments/<int:pk>/',
+        ReviewerAssignmentDetailView.as_view(),
+        name='reviewer-assignment-detail',
+    ),
+    path(
+        'reviewer-assignments/<int:pk>/submit-report/',
+        ReviewerSubmitReportView.as_view(),
+        name='reviewer-assignment-submit-report',
+    ),
+    path(
         'reviewer-assignments/<int:pk>/reject/',
         RejectReviewerAssignmentView.as_view(),
         name='reviewer-assignment-reject',
+    ),
+    path(
+        'submissions/<int:submission_id>/review-reports/',
+        SubmissionReviewReportListView.as_view(),
+        name='submission-review-reports',
+    ),
+    path(
+        'review-reports/',
+        EditorReviewReportListView.as_view(),
+        name='editor-review-report-list',
+    ),
+    path(
+        'submissions/<int:submission_id>/editor-decision/',
+        SubmissionEditorDecisionView.as_view(),
+        name='submission-editor-decision',
     ),
 ]
 

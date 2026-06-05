@@ -108,6 +108,54 @@ class ReviewerAssignmentStatus(models.TextChoices):
     REJECTED = 'rejected', 'Rejected'
 
 
+class ReviewerRecommendation(models.TextChoices):
+    ACCEPT = 'accept', 'Accept'
+    REJECT = 'reject', 'Reject'
+    MINOR_REVISION = 'minor_revision', 'Minor Revision'
+    MAJOR_REVISION = 'major_revision', 'Major Revision'
+
+
+class RefereeConfidence(models.TextChoices):
+    CONFIDENT = 'confident', 'With confidence'
+    NOT_ABLE = 'not_able', 'I am not able to referee this mss'
+
+
+class RefereeSuitabilityRating(models.TextChoices):
+    RATING_100 = '100', '100%'
+    RATING_75 = '75', '75%'
+    RATING_50 = '50', '50%'
+    RATING_25 = '25', '25%'
+    RATING_0 = '0', '0%'
+
+
+class PaperQualityRating(models.TextChoices):
+    EXCELLENT = 'excellent', 'Excellent'
+    SIGNIFICANT = 'significant', 'Significant'
+    MARGINAL = 'marginal', 'Marginal'
+    NON_SIGNIFICANT = 'non_significant', 'Non Significant'
+    ERRONEOUS_OR_TRIVIAL = 'erroneous_or_trivial', 'Erroneous or Trivial'
+
+
+class PaperValueRating(models.TextChoices):
+    WORTH_PUBLISHING = 'worth_publishing', 'Worth publishing'
+    MINOR_MODIFICATIONS = (
+        'minor_modifications',
+        'Worth publishing when revised - minor modifications',
+    )
+    MAJOR_MODIFICATIONS = (
+        'major_modifications',
+        'Worth publishing when revised - major modifications',
+    )
+    NOT_WORTH_PUBLISHING = 'not_worth_publishing', 'Not worth publishing'
+
+
+class ManuscriptClassificationRecommendation(models.TextChoices):
+    REVIEW = 'review', 'A review'
+    PAPER = 'paper', 'A paper'
+    COMMUNICATION = 'communication', 'A communication'
+    TECHNICAL_NOTE = 'technical_note', 'A technical note'
+
+
 class Submission(models.Model):
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -396,3 +444,105 @@ class SubmissionReviewerAssignment(models.Model):
 
     def __str__(self):
         return f'{self.submission} -> {self.reviewer}'
+
+
+class SubmissionReviewerReport(models.Model):
+    assignment = models.OneToOneField(
+        SubmissionReviewerAssignment,
+        on_delete=models.CASCADE,
+        related_name='review_report'
+    )
+    review_report_complete = models.BooleanField(default=False)
+    ready_to_transfer_to_editor = models.BooleanField(default=False)
+    recommendation = models.CharField(
+        max_length=20,
+        choices=ReviewerRecommendation.choices,
+        blank=True,
+    )
+    reviewer_comments_to_author = models.TextField(blank=True)
+    confidential_comments_to_editor = models.TextField(blank=True)
+
+    paper_referee_confidence = models.CharField(
+        max_length=20,
+        choices=RefereeConfidence.choices,
+        blank=True,
+    )
+    referee_suitability_rating = models.CharField(
+        max_length=3,
+        choices=RefereeSuitabilityRating.choices,
+        blank=True,
+    )
+    paper_quality_rating = models.CharField(
+        max_length=30,
+        choices=PaperQualityRating.choices,
+        blank=True,
+    )
+    paper_value_rating = models.CharField(
+        max_length=30,
+        choices=PaperValueRating.choices,
+        blank=True,
+    )
+    suitable_for_different_journal = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+
+    content_original_work = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    content_well_organised = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    content_abstract_adequate = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    content_technically_sound = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    content_practical_application = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    content_references_adequate = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+
+    presentation_explains_clearly = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    presentation_methods_included = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    presentation_demonstrates_value = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+    presentation_language_clear = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+
+    manuscript_classification = models.CharField(
+        max_length=20,
+        choices=ManuscriptClassificationRecommendation.choices,
+        blank=True,
+    )
+    submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f'Reviewer report for assignment #{self.assignment_id}'

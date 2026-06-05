@@ -27,6 +27,7 @@ from .models import (
     SubmissionStatus,
     Classification,
     SubmissionReviewerAssignment,
+    SubmissionReviewerReport,
     ReviewerAssignmentStatus,
 )
 
@@ -512,6 +513,35 @@ class SubmissionEditorAutoAssignmentTests(APITestCase):
 
 
 class SubmissionReviewerAssignmentTests(APITestCase):
+    def make_review_report_payload(self, ready_to_transfer=True):
+        return {
+            'review_report_complete': True,
+            'ready_to_transfer_to_editor': ready_to_transfer,
+            'recommendation': 'minor_revision',
+            'reviewer_comments_to_author': (
+                'The manuscript is promising but needs minor revisions.'
+            ),
+            'confidential_comments_to_editor': (
+                'The methods are useful and the paper can move forward.'
+            ),
+            'paper_referee_confidence': 'confident',
+            'referee_suitability_rating': '100',
+            'paper_quality_rating': 'significant',
+            'paper_value_rating': 'minor_modifications',
+            'suitable_for_different_journal': False,
+            'content_original_work': True,
+            'content_well_organised': True,
+            'content_abstract_adequate': True,
+            'content_technically_sound': True,
+            'content_practical_application': True,
+            'content_references_adequate': True,
+            'presentation_explains_clearly': True,
+            'presentation_methods_included': True,
+            'presentation_demonstrates_value': True,
+            'presentation_language_clear': True,
+            'manuscript_classification': 'paper',
+        }
+
     def save_submission_without_status_notifications(self):
         pre_save.disconnect(
             remember_previous_submission_status,
@@ -663,6 +693,317 @@ class SubmissionReviewerAssignmentTests(APITestCase):
         self.assertEqual(
             self.submission.status,
             SubmissionStatus.UNDER_PEER_REVIEW,
+        )
+
+    def test_reviewer_can_list_pending_assigned_articles(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.PENDING,
+            is_active=True,
+        )
+
+        self.client.force_authenticate(self.matching_reviewer)
+        response = self.client.get(
+            reverse('reviewer-assignment-pending-list')
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['id'], assignment.id)
+        self.assertEqual(
+            response.data[0]['submission']['id'],
+            self.submission.id,
+        )
+        self.assertEqual(
+            response.data[0]['submission']['title'],
+            self.submission.title,
+        )
+
+    def test_reviewer_can_list_accepted_articles(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+
+        self.client.force_authenticate(self.matching_reviewer)
+        response = self.client.get(
+            reverse('reviewer-assignment-accepted-list')
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['id'], assignment.id)
+        self.assertEqual(
+            response.data[0]['submission']['id'],
+            self.submission.id,
+        )
+
+    def test_reviewer_can_get_assignment_detail(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+
+        self.client.force_authenticate(self.matching_reviewer)
+        response = self.client.get(
+            reverse(
+                'reviewer-assignment-detail',
+                kwargs={'pk': assignment.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['id'], assignment.id)
+        self.assertEqual(
+            response.data['submission']['id'],
+            self.submission.id,
+        )
+        self.assertIsNone(response.data['review_report'])
+
+    def test_non_reviewer_cannot_list_reviewer_assignments(self):
+        self.client.force_authenticate(self.author)
+
+        pending_response = self.client.get(
+            reverse('reviewer-assignment-pending-list')
+        )
+        accepted_response = self.client.get(
+            reverse('reviewer-assignment-accepted-list')
+        )
+
+        self.assertEqual(
+            pending_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            accepted_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_reviewer_cannot_submit_report_for_pending_assignment(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.PENDING,
+            is_active=True,
+        )
+
+        self.client.force_authenticate(self.matching_reviewer)
+        response = self.client.post(
+            reverse(
+                'reviewer-assignment-submit-report',
+                kwargs={'pk': assignment.pk},
+            ),
+            self.make_review_report_payload(),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_reviewer_can_submit_report_and_editor_is_notified(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+
+        self.client.force_authenticate(self.matching_reviewer)
+        response = self.client.post(
+            reverse(
+                'reviewer-assignment-submit-report',
+                kwargs={'pk': assignment.pk},
+            ),
+            self.make_review_report_payload(),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        assignment.refresh_from_db()
+        self.assertTrue(hasattr(assignment, 'review_report'))
+        self.assertTrue(assignment.review_report.ready_to_transfer_to_editor)
+        self.assertIsNotNone(assignment.review_report.submitted_at)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.editor,
+                title='Reviewer Report Submitted',
+            ).exists()
+        )
+
+    def test_editor_can_list_transferred_review_reports(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        SubmissionReviewerReport.objects.create(
+            assignment=assignment,
+            submitted_at=timezone.now(),
+            **self.make_review_report_payload(),
+        )
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.get(
+            reverse(
+                'submission-review-reports',
+                kwargs={'submission_id': self.submission.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['assignment_id'],
+            assignment.id,
+        )
+        self.assertEqual(
+            response.data[0]['submission']['id'],
+            self.submission.id,
+        )
+        self.assertEqual(
+            response.data[0]['reviewer']['id'],
+            self.matching_reviewer.id,
+        )
+
+    def test_editor_can_list_all_transferred_review_reports(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        SubmissionReviewerReport.objects.create(
+            assignment=assignment,
+            submitted_at=timezone.now(),
+            **self.make_review_report_payload(),
+        )
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.get(
+            reverse('editor-review-report-list')
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['submission']['id'],
+            self.submission.id,
+        )
+        self.assertEqual(
+            response.data[0]['reviewer']['id'],
+            self.matching_reviewer.id,
+        )
+
+    def test_editor_review_report_list_supports_reviewer_filter(self):
+        matching_assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        second_assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.second_matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        SubmissionReviewerReport.objects.create(
+            assignment=matching_assignment,
+            submitted_at=timezone.now(),
+            **self.make_review_report_payload(),
+        )
+        SubmissionReviewerReport.objects.create(
+            assignment=second_assignment,
+            submitted_at=timezone.now(),
+            **self.make_review_report_payload(),
+        )
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.get(
+            reverse('editor-review-report-list'),
+            {'reviewer_id': self.second_matching_reviewer.id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0]['reviewer']['id'],
+            self.second_matching_reviewer.id,
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_editor_can_apply_decision_after_transferred_report(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        SubmissionReviewerReport.objects.create(
+            assignment=assignment,
+            submitted_at=timezone.now(),
+            **self.make_review_report_payload(),
+        )
+        self.submission.status = SubmissionStatus.UNDER_PEER_REVIEW
+        self.save_submission_without_status_notifications()
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.post(
+            reverse(
+                'submission-editor-decision',
+                kwargs={'submission_id': self.submission.pk},
+            ),
+            {
+                'decision': SubmissionStatus.MINOR_REVISION,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.submission.refresh_from_db()
+        assignment.refresh_from_db()
+        self.assertEqual(
+            self.submission.status,
+            SubmissionStatus.MINOR_REVISION,
+        )
+        self.assertFalse(assignment.is_active)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.author,
+                title='Submission Status Updated',
+            ).exists()
         )
 
     @override_settings(

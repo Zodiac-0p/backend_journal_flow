@@ -67,13 +67,22 @@ Minimum required fields:
   "email": "author@example.com",
   "username": "author1",
   "full_name": "Author One",
+  "password": "StrongPass123"
+}
+
+Minimum required fields for reviewer registration:
+{
+  "email": "reviewer@example.com",
+  "username": "reviewer1",
+  "full_name": "Reviewer One",
   "password": "StrongPass123",
+  "want_to_be_reviewer": true,
   "classification_ids": [1, 2, 3, 4]
 }
 
 Notes:
-- classification_ids is required during registration.
-- Select at least 4 active journal classifications.
+- classification_ids is required only when want_to_be_reviewer is true.
+- Reviewer registration must include at least 4 active journal classifications.
 - Sends welcome email.
 - Creates an in-app notification.
 
@@ -160,7 +169,8 @@ Request:
 }
 
 Notes:
-- If classification_ids is included, select at least 4 active journal classifications.
+- If changing from author to reviewer, include want_to_be_reviewer=true and at least 4 active classification_ids.
+- If an existing reviewer updates classification_ids, include at least 4 active journal classifications.
 
 Revert reviewer flag:
 {
@@ -266,6 +276,15 @@ POST /api/accounts/users/{user_id}/make-reviewer/
 Behavior:
 - Author -> Reviewer
 - Reviewer -> Author
+
+Rules:
+- If changing Author -> Reviewer, the user must already have at least 4 active classifications on their profile.
+- If the user does not have at least 4 active classifications, the API returns:
+
+HTTP 400 Bad Request
+{
+  "detail": "User must have at least 4 active classifications before becoming a reviewer."
+}
 
 ############################################################
 SECTION 2: JOURNALS API
@@ -640,7 +659,7 @@ HTTP 400 Bad Request
 }
 
 Testing note:
-- Until an editor decision API is implemented, set the submission status to minor_revision or major_revision using Django admin or Django shell before testing this endpoint.
+- Use the editor decision API to set the submission status to minor_revision or major_revision before testing this endpoint.
 - On successful resubmission, the API creates a new submission version and changes the submission status back to submitted.
 - Sends status-change email to the author.
 - Creates an in-app notification for the author.
@@ -717,7 +736,7 @@ Rules:
 - Use reviewer_id to assign one reviewer, or reviewer_ids to assign multiple reviewers.
 - Each selected reviewer must belong to an active reviewer account.
 - Reviewer must match at least one selected submission classification.
-- On success, the submission status changes to under_peer_review.
+- On success, the submission status changes to under_peer_review (peer review stage).
 - Sends reviewer-assignment email to each newly assigned reviewer.
 - Creates an in-app notification for each newly assigned reviewer.
 - Sends status-change email to the author when status changes.
@@ -757,7 +776,69 @@ Example response:
   }
 ]
 
-68. Reviewer Accepts Review Assignment
+68. Reviewer Assignment Detail
+GET /api/journals/reviewer-assignments/{assignment_id}/
+
+Reviewer only.
+
+Purpose:
+- Returns one assigned article with its submission summary and any saved reviewer report.
+
+Rules:
+- Only the assigned reviewer can view this assignment.
+
+69. List Reviewer Pending Assigned Articles
+GET /api/journals/reviewer-assignments/pending/
+
+Reviewer only.
+
+Purpose:
+- Lists assigned articles with assignment status pending.
+- Use this list to show articles available for Accept or Reject actions.
+
+Rules:
+- Only the logged-in reviewer can view their own pending assignments.
+- Only active reviewer assignments with status pending are returned.
+
+Example response:
+[
+  {
+    "id": 1,
+    "submission": {
+      "id": 10,
+      "title": "Submitted manuscript",
+      "status": "under_peer_review",
+      "author": 3,
+      "author_name": "Assignment Author",
+      "article_type": 1,
+      "article_type_name": "Research Article",
+      "submitted_at": "2026-06-05T10:30:00+05:30",
+      "created_at": "2026-06-05T09:30:00+05:30",
+      "updated_at": "2026-06-05T10:30:00+05:30"
+    },
+    "assigned_by": 2,
+    "assigned_by_name": "Editor One",
+    "assigned_at": "2026-06-05T10:35:00+05:30",
+    "status": "pending",
+    "responded_at": null,
+    "reviewer_response_reminder_sent_at": null,
+    "is_active": true
+  }
+]
+
+70. List Reviewer Accepted Articles
+GET /api/journals/reviewer-assignments/accepted/
+
+Reviewer only.
+
+Purpose:
+- Lists articles already accepted by the logged-in reviewer.
+
+Rules:
+- Only the logged-in reviewer can view their own accepted assignments.
+- Only active reviewer assignments with status accepted are returned.
+
+71. Reviewer Accepts Review Assignment
 POST /api/journals/reviewer-assignments/{assignment_id}/accept/
 
 Reviewer only.
@@ -769,7 +850,7 @@ Rules:
 - responded_at is set.
 - Editor receives email and in-app notification.
 
-69. Reviewer Rejects Review Assignment
+72. Reviewer Rejects Review Assignment
 POST /api/journals/reviewer-assignments/{assignment_id}/reject/
 
 Reviewer only.
@@ -781,6 +862,164 @@ Rules:
 - responded_at is set.
 - is_active becomes false.
 - Editor receives email and in-app notification.
+
+73. Submit Reviewer Report
+POST /api/journals/reviewer-assignments/{assignment_id}/submit-report/
+
+Reviewer only.
+
+Purpose:
+- Submit the full reviewer questionnaire from a single page.
+- The same endpoint can update an existing reviewer report.
+
+Rules:
+- Only the assigned reviewer can submit the report.
+- The reviewer assignment must already be accepted.
+- If ready_to_transfer_to_editor is true, the questionnaire fields and recommendation are required.
+- When the report is transferred, the editor receives email and in-app notification.
+
+Request:
+{
+  "review_report_complete": true,
+  "ready_to_transfer_to_editor": true,
+  "recommendation": "minor_revision",
+  "reviewer_comments_to_author": "The manuscript is promising but needs minor revisions.",
+  "confidential_comments_to_editor": "The methods are useful and the paper can move forward.",
+  "paper_referee_confidence": "confident",
+  "referee_suitability_rating": "100",
+  "paper_quality_rating": "significant",
+  "paper_value_rating": "minor_modifications",
+  "suitable_for_different_journal": false,
+  "content_original_work": true,
+  "content_well_organised": true,
+  "content_abstract_adequate": true,
+  "content_technically_sound": true,
+  "content_practical_application": true,
+  "content_references_adequate": true,
+  "presentation_explains_clearly": true,
+  "presentation_methods_included": true,
+  "presentation_demonstrates_value": true,
+  "presentation_language_clear": true,
+  "manuscript_classification": "paper"
+}
+
+Allowed values:
+- recommendation: accept | reject | minor_revision | major_revision
+- paper_referee_confidence: confident | not_able
+- referee_suitability_rating: 100 | 75 | 50 | 25 | 0
+- paper_quality_rating: excellent | significant | marginal | non_significant | erroneous_or_trivial
+- paper_value_rating: worth_publishing | minor_modifications | major_modifications | not_worth_publishing
+- manuscript_classification: review | paper | communication | technical_note
+
+74. List Submission Review Reports
+GET /api/journals/submissions/{submission_id}/review-reports/
+
+Editor, Editorial Manager, or Super Admin only.
+
+Purpose:
+- Lists reviewer reports already transferred to the editor for one submission.
+
+Rules:
+- Only reports with ready_to_transfer_to_editor=true are returned.
+
+74A. List All Reviewer Submitted Article Reviews
+GET /api/journals/review-reports/
+
+Editor, Editorial Manager, or Super Admin only.
+
+Purpose:
+- Lists all reviewer reports already submitted and transferred to the editor across all accessible submissions.
+- Useful for editor dashboards and review monitoring.
+
+Optional query parameters:
+- reviewer_id=5
+- submission_id=10
+
+Rules:
+- Only reports with ready_to_transfer_to_editor=true are returned.
+- Editors can use reviewer_id to filter reports submitted by one reviewer.
+- Editors can use submission_id to filter reports for one article.
+
+Example response:
+[
+  {
+    "id": 1,
+    "submission": {
+      "id": 10,
+      "title": "Submitted manuscript",
+      "status": "under_peer_review",
+      "author": 3,
+      "author_name": "Assignment Author",
+      "article_type": 1,
+      "article_type_name": "Research Article",
+      "submitted_at": "2026-06-05T10:30:00+05:30",
+      "created_at": "2026-06-05T09:30:00+05:30",
+      "updated_at": "2026-06-05T10:30:00+05:30"
+    },
+    "assignment_id": 1,
+    "assignment_status": "accepted",
+    "reviewer": {
+      "id": 5,
+      "email": "reviewer@example.com",
+      "full_name": "Reviewer One",
+      "organization": "ABC University",
+      "job_title": "Professor",
+      "expertise": "Machine Learning",
+      "classifications": []
+    },
+    "review_report_complete": true,
+    "ready_to_transfer_to_editor": true,
+    "recommendation": "minor_revision",
+    "reviewer_comments_to_author": "The manuscript is promising but needs minor revisions.",
+    "confidential_comments_to_editor": "The methods are useful and the paper can move forward.",
+    "paper_referee_confidence": "confident",
+    "referee_suitability_rating": "100",
+    "paper_quality_rating": "significant",
+    "paper_value_rating": "minor_modifications",
+    "suitable_for_different_journal": false,
+    "content_original_work": true,
+    "content_well_organised": true,
+    "content_abstract_adequate": true,
+    "content_technically_sound": true,
+    "content_practical_application": true,
+    "content_references_adequate": true,
+    "presentation_explains_clearly": true,
+    "presentation_methods_included": true,
+    "presentation_demonstrates_value": true,
+    "presentation_language_clear": true,
+    "manuscript_classification": "paper",
+    "responded_at": "2026-06-05T11:00:00+05:30",
+    "submitted_at": "2026-06-06T14:10:00+05:30",
+    "created_at": "2026-06-06T14:10:00+05:30",
+    "updated_at": "2026-06-06T14:10:00+05:30"
+  }
+]
+
+75. Submit Editor Decision
+POST /api/journals/submissions/{submission_id}/editor-decision/
+
+Editor, Editorial Manager, or Super Admin only.
+
+Purpose:
+- Apply the editor decision after at least one transferred reviewer report exists.
+
+Request:
+{
+  "decision": "minor_revision",
+  "editor_comment": ""
+}
+
+Allowed decision values:
+- accepted
+- rejected
+- minor_revision
+- major_revision
+
+Rules:
+- At least one transferred reviewer report is required.
+- Submission must be under_editor_review or under_peer_review.
+- On success, the submission status is updated and active reviewer assignments are closed.
+- The author receives the standard submission status update email and in-app notification.
 
 ############################################################
 SECTION 4: NOTIFICATIONS API
@@ -797,6 +1036,7 @@ Automatic Notification Events
 - Final submission: least-loaded editor assignment email and in-app notification.
 - Reviewer assignment: reviewer email and in-app notification.
 - Reviewer accept/reject response: editor email and in-app notification.
+- Reviewer report submitted: editor email and in-app notification.
 - Reviewer response overdue after 3 days: editor email and in-app notification.
 
 Scheduled Notification Command
@@ -816,13 +1056,13 @@ Options:
 python manage.py notify_overdue_reviewer_assignments --days 3
 python manage.py notify_overdue_reviewer_assignments --dry-run
 
-70. List My Notifications
+76. List My Notifications
 GET /api/notifications/
 
-71. Mark Notification Read
+77. Mark Notification Read
 POST /api/notifications/{notification_id}/mark-read/
 
-72. Mark All Notifications Read
+78. Mark All Notifications Read
 POST /api/notifications/mark-all-read/
 
 ############################################################
@@ -860,7 +1100,7 @@ SECTION 6: SUGGESTED ONE-BY-ONE TESTING ORDER
 2. Create role choices.
 3. Create disciplines.
 4. Create at least 4 classifications.
-5. Register an author using at least 4 classification_ids.
+5. Register an author. If registering as reviewer, include at least 4 classification_ids.
 6. Login as author and save access/refresh tokens.
 7. Get profile.
 8. Update profile.
@@ -888,13 +1128,18 @@ SECTION 6: SUGGESTED ONE-BY-ONE TESTING ORDER
 30. List eligible reviewers filtered by selected classifications.
 31. Assign a matching reviewer.
 32. Login as reviewer.
-33. Accept or reject the review assignment.
-34. Withdraw submission if needed.
-35. For resubmission testing, set the submission status to minor_revision or major_revision in Django admin/shell.
-36. Resubmit revised manuscript.
-37. List notifications.
-38. Mark one notification read.
-39. Mark all notifications read.
+33. List pending assigned articles.
+34. Accept the review assignment.
+35. Open reviewer assignment detail.
+36. Submit reviewer report from the single-page form.
+37. List accepted reviewer articles.
+38. Login as editor/editorial manager/super admin.
+39. List transferred reviewer reports for the submission.
+40. Apply editor decision like minor_revision or major_revision.
+41. Resubmit revised manuscript.
+42. List notifications.
+43. Mark one notification read.
+44. Mark all notifications read.
 
 ############################################################
 SECTION 7: USER ROLES
@@ -904,10 +1149,14 @@ Author
 - Register and submit manuscripts.
 
 Reviewer
-- Intended role for manuscript review. Review assignment/report APIs are not implemented yet.
+- Can view pending assigned articles.
+- Can accept or reject review assignments.
+- Can submit reviewer reports.
 
 Editor
 - Can view all submissions.
+- Can view transferred reviewer reports.
+- Can apply editor decisions.
 
 Editorial Manager
 - Manage users.
@@ -917,3 +1166,128 @@ Editorial Manager
 
 Super Admin
 - Full system control.
+
+############################################################
+SECTION 8: GAP ANALYSIS AND SUGGESTED NEXT APIS
+############################################################
+
+Current status after code review
+- Most endpoints documented in Sections 1 to 7 already exist in the backend.
+- The main missing work is now behavior completion, workflow restrictions, and a few useful editorial APIs.
+
+Implemented endpoint behavior gaps to fix
+
+1. Reset Password Success Email
+Current code:
+- Reset password creates an in-app notification.
+- Reset password does not send the success email mentioned in Section 1.
+
+Need:
+- Send a password reset success email after POST /api/accounts/reset-password/ succeeds.
+
+2. Editor Decision Comment Is Not Saved
+Current code:
+- POST /api/journals/submissions/{submission_id}/editor-decision/ accepts editor_comment.
+- editor_comment is validated but not stored anywhere.
+
+Need:
+- Add a model field or decision history model so editor comments are saved and returned later.
+
+3. Notification Read API Can Raise Server Error For Wrong ID
+Current code:
+- POST /api/notifications/{notification_id}/mark-read/ uses Notification.objects.get(...)
+- Missing notifications are not handled safely.
+
+Need:
+- Return HTTP 404 with a clean JSON response when the notification does not exist or does not belong to the logged-in user.
+
+4. Submission Workflow Needs Status Guards
+Current code:
+- Authors can patch files/authors/submission data even after submission.
+- Withdraw does not restrict which statuses can be withdrawn.
+- Submit does not block re-submitting already submitted or closed items.
+
+Need:
+- Restrict edit actions to draft and revision stages only.
+- Restrict withdraw to allowed statuses only.
+- Prevent final submit on already submitted/withdrawn/accepted/rejected/published records.
+
+5. Classification Draft Save Rule Needs Clarification
+Current code:
+- PATCH submission with classification_ids requires at least 4 classifications immediately.
+- This prevents saving a partial draft with 1 to 3 classifications.
+
+Need:
+- Choose one approach and keep API.txt aligned:
+- Option A: allow partial draft saves and enforce 4 classifications only on final submit.
+- Option B: keep current validation and clearly document that fewer than 4 classifications are rejected even in draft mode.
+
+Suggested new APIs to add next
+
+79. List Reviewer Assignments For One Submission
+GET /api/journals/submissions/{submission_id}/reviewer-assignments/
+
+Why:
+- Editors currently need the full submission detail to inspect assignments.
+- A dedicated endpoint is cleaner for editorial dashboards.
+
+Suggested response:
+- Active and inactive reviewer assignments for that submission.
+- Reviewer info, assigned_by, assigned_at, status, responded_at, is_active.
+
+80. Remove Or Deactivate Reviewer Assignment
+POST /api/journals/reviewer-assignments/{assignment_id}/deactivate/
+
+Why:
+- Editors can assign reviewers, but there is no direct API to cancel an assignment before or during review.
+
+Suggested behavior:
+- Editor, Editorial Manager, or Super Admin only.
+- Set is_active=false.
+- If all active assignments are removed, optionally move submission back to under_editor_review.
+
+81. Reassign Editor
+POST /api/journals/submissions/{submission_id}/reassign-editor/
+
+Request:
+{
+  "editor_id": 8
+}
+
+Why:
+- Final submit auto-assigns the least-loaded editor, but there is no API to manually reassign later.
+
+82. Submission Status History
+GET /api/journals/submissions/{submission_id}/status-history/
+
+Why:
+- The system already sends status notifications, but there is no API to audit status changes, reviewer stage changes, or editor decisions.
+
+Suggested data:
+- old_status
+- new_status
+- changed_by
+- comment
+- created_at
+
+83. Reviewer Dashboard Summary
+GET /api/journals/reviewer-dashboard/
+
+Why:
+- Reviewer APIs exist for pending and accepted assignments, but there is no single summary endpoint.
+
+Suggested response:
+- pending_count
+- accepted_count
+- submitted_report_count
+
+84. Notification Unread Count
+GET /api/notifications/unread-count/
+
+Why:
+- Frontend notification badges currently need the full list API.
+
+Suggested response:
+{
+  "unread_count": 5
+}

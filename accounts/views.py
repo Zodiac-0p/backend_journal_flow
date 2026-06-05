@@ -26,6 +26,7 @@ from .serializers import (
     UserListSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
+    MIN_CLASSIFICATIONS_REQUIRED,
 )
 
 User = get_user_model()
@@ -182,6 +183,23 @@ class PromoteToReviewerView(APIView):
                 {"detail": "User not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+        if not user.is_reviewer:
+            active_classification_count = user.classifications.filter(
+                is_active=True
+            ).count()
+
+            if active_classification_count < MIN_CLASSIFICATIONS_REQUIRED:
+                return Response(
+                    {
+                        'detail': (
+                            'User must have at least '
+                            f'{MIN_CLASSIFICATIONS_REQUIRED} active '
+                            'classifications before becoming a reviewer.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         # Toggle reviewer status
         user.is_reviewer = not user.is_reviewer

@@ -15,7 +15,9 @@ from .models import (
     SubmissionFileType,
     SubmissionFile,
     SubmissionReviewerAssignment,
+    SubmissionReviewerReport,
     ReviewerAssignmentStatus,
+    ReviewerRecommendation,
     MIN_CLASSIFICATIONS_REQUIRED,
 )
 
@@ -231,6 +233,152 @@ class ReviewerCandidateSerializer(serializers.ModelSerializer):
         ]
 
 
+class ReviewerAssignmentSubmissionSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(
+        source='author.full_name',
+        read_only=True,
+    )
+    article_type_name = serializers.CharField(
+        source='article_type.name',
+        read_only=True,
+    )
+
+    class Meta:
+        model = Submission
+        fields = [
+            'id',
+            'title',
+            'status',
+            'author',
+            'author_name',
+            'article_type',
+            'article_type_name',
+            'submitted_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = fields
+
+
+class SubmissionReviewerReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubmissionReviewerReport
+        fields = [
+            'id',
+            'assignment',
+            'review_report_complete',
+            'ready_to_transfer_to_editor',
+            'recommendation',
+            'reviewer_comments_to_author',
+            'confidential_comments_to_editor',
+            'paper_referee_confidence',
+            'referee_suitability_rating',
+            'paper_quality_rating',
+            'paper_value_rating',
+            'suitable_for_different_journal',
+            'content_original_work',
+            'content_well_organised',
+            'content_abstract_adequate',
+            'content_technically_sound',
+            'content_practical_application',
+            'content_references_adequate',
+            'presentation_explains_clearly',
+            'presentation_methods_included',
+            'presentation_demonstrates_value',
+            'presentation_language_clear',
+            'manuscript_classification',
+            'submitted_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'assignment',
+            'submitted_at',
+            'created_at',
+            'updated_at',
+        ]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+
+        ready_to_transfer = attrs.get(
+            'ready_to_transfer_to_editor',
+            getattr(
+                self.instance,
+                'ready_to_transfer_to_editor',
+                False,
+            ),
+        )
+        report_complete = attrs.get(
+            'review_report_complete',
+            getattr(self.instance, 'review_report_complete', False),
+        )
+
+        if ready_to_transfer and not report_complete:
+            raise serializers.ValidationError({
+                'review_report_complete': [
+                    'Set this to true before transferring the report.'
+                ]
+            })
+
+        if ready_to_transfer:
+            required_fields = [
+                'recommendation',
+                'paper_referee_confidence',
+                'referee_suitability_rating',
+                'paper_quality_rating',
+                'paper_value_rating',
+                'suitable_for_different_journal',
+                'content_original_work',
+                'content_well_organised',
+                'content_abstract_adequate',
+                'content_technically_sound',
+                'content_practical_application',
+                'content_references_adequate',
+                'presentation_explains_clearly',
+                'presentation_methods_included',
+                'presentation_demonstrates_value',
+                'presentation_language_clear',
+                'manuscript_classification',
+            ]
+
+            errors = {}
+            for field_name in required_fields:
+                value = attrs.get(
+                    field_name,
+                    getattr(self.instance, field_name, None)
+                    if self.instance else None,
+                )
+                if value in (None, ''):
+                    errors[field_name] = [
+                        (
+                            'This field is required when '
+                            'ready_to_transfer_to_editor is true.'
+                        )
+                    ]
+
+            if errors:
+                raise serializers.ValidationError(errors)
+
+        return attrs
+
+    def create(self, validated_data):
+        if validated_data.get('ready_to_transfer_to_editor'):
+            validated_data['submitted_at'] = timezone.now()
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if validated_data.get(
+            'ready_to_transfer_to_editor',
+            instance.ready_to_transfer_to_editor,
+        ):
+            validated_data['submitted_at'] = timezone.now()
+        else:
+            validated_data['submitted_at'] = None
+        return super().update(instance, validated_data)
+
+
 class SubmissionReviewerAssignmentSerializer(serializers.ModelSerializer):
     reviewer = ReviewerCandidateSerializer(read_only=True)
     assigned_by_name = serializers.CharField(
@@ -263,6 +411,151 @@ class SubmissionReviewerAssignmentSerializer(serializers.ModelSerializer):
             'reviewer_response_reminder_sent_at',
             'is_active',
         ]
+
+
+class ReviewerAssignmentListSerializer(serializers.ModelSerializer):
+    submission = ReviewerAssignmentSubmissionSerializer(read_only=True)
+    assigned_by_name = serializers.CharField(
+        source='assigned_by.full_name',
+        read_only=True,
+    )
+
+    class Meta:
+        model = SubmissionReviewerAssignment
+        fields = [
+            'id',
+            'submission',
+            'assigned_by',
+            'assigned_by_name',
+            'assigned_at',
+            'status',
+            'responded_at',
+            'reviewer_response_reminder_sent_at',
+            'is_active',
+        ]
+        read_only_fields = fields
+
+
+class ReviewerAssignmentDetailSerializer(serializers.ModelSerializer):
+    submission = ReviewerAssignmentSubmissionSerializer(read_only=True)
+    reviewer = ReviewerCandidateSerializer(read_only=True)
+    assigned_by_name = serializers.CharField(
+        source='assigned_by.full_name',
+        read_only=True,
+    )
+    review_report = SubmissionReviewerReportSerializer(read_only=True)
+
+    class Meta:
+        model = SubmissionReviewerAssignment
+        fields = [
+            'id',
+            'submission',
+            'reviewer',
+            'assigned_by',
+            'assigned_by_name',
+            'assigned_at',
+            'status',
+            'responded_at',
+            'reviewer_response_reminder_sent_at',
+            'is_active',
+            'review_report',
+        ]
+        read_only_fields = fields
+
+
+class SubmissionReviewReportListSerializer(serializers.ModelSerializer):
+    submission = ReviewerAssignmentSubmissionSerializer(
+        source='assignment.submission',
+        read_only=True,
+    )
+    reviewer = ReviewerCandidateSerializer(
+        source='assignment.reviewer',
+        read_only=True,
+    )
+    assignment_id = serializers.IntegerField(
+        source='assignment.id',
+        read_only=True,
+    )
+    assignment_status = serializers.CharField(
+        source='assignment.status',
+        read_only=True,
+    )
+    responded_at = serializers.DateTimeField(
+        source='assignment.responded_at',
+        read_only=True,
+    )
+
+    class Meta:
+        model = SubmissionReviewerReport
+        fields = [
+            'id',
+            'submission',
+            'assignment_id',
+            'assignment_status',
+            'reviewer',
+            'review_report_complete',
+            'ready_to_transfer_to_editor',
+            'recommendation',
+            'reviewer_comments_to_author',
+            'confidential_comments_to_editor',
+            'paper_referee_confidence',
+            'referee_suitability_rating',
+            'paper_quality_rating',
+            'paper_value_rating',
+            'suitable_for_different_journal',
+            'content_original_work',
+            'content_well_organised',
+            'content_abstract_adequate',
+            'content_technically_sound',
+            'content_practical_application',
+            'content_references_adequate',
+            'presentation_explains_clearly',
+            'presentation_methods_included',
+            'presentation_demonstrates_value',
+            'presentation_language_clear',
+            'manuscript_classification',
+            'responded_at',
+            'submitted_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = fields
+
+
+class EditorDecisionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(
+        choices=[
+            SubmissionStatus.ACCEPTED,
+            SubmissionStatus.REJECTED,
+            SubmissionStatus.MINOR_REVISION,
+            SubmissionStatus.MAJOR_REVISION,
+        ]
+    )
+    editor_comment = serializers.CharField(
+        required=False,
+        allow_blank=True,
+    )
+
+    def validate(self, attrs):
+        submission = self.context['submission']
+        ready_reports_count = submission.reviewer_assignments.filter(
+            review_report__ready_to_transfer_to_editor=True
+        ).count()
+
+        if ready_reports_count == 0:
+            raise serializers.ValidationError(
+                'At least one transferred reviewer report is required.'
+            )
+
+        if submission.status not in [
+            SubmissionStatus.UNDER_EDITOR_REVIEW,
+            SubmissionStatus.UNDER_PEER_REVIEW,
+        ]:
+            raise serializers.ValidationError(
+                'Editor decisions can only be applied during review.'
+            )
+
+        return attrs
 
 
 class AssignReviewerSerializer(serializers.Serializer):
@@ -594,16 +887,6 @@ class SubmitSubmissionSerializer(serializers.Serializer):
         return missing_requirements
 
     def save(self, submission):
-        missing_requirements = self.get_missing_requirements(submission)
-
-        if missing_requirements:
-            raise serializers.ValidationError({
-                'detail': (
-                    'Complete all required fields before final submission.'
-                ),
-                'missing_requirements': missing_requirements,
-            })
-
         active_statuses = [
             SubmissionStatus.UNDER_EDITOR_REVIEW,
             SubmissionStatus.UNDER_PEER_REVIEW,

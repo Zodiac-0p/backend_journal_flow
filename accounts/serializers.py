@@ -43,12 +43,18 @@ class UserClassificationSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'is_active']
 
 
-def get_active_classifications(classification_ids):
+def get_active_classifications(
+    classification_ids,
+    min_required=None,
+):
     unique_ids = set(classification_ids)
 
-    if len(unique_ids) < MIN_CLASSIFICATIONS_REQUIRED:
+    if (
+        min_required is not None
+        and len(unique_ids) < min_required
+    ):
         raise serializers.ValidationError(
-            f'Select at least {MIN_CLASSIFICATIONS_REQUIRED} classifications.'
+            f'Select at least {min_required} classifications.'
         )
 
     classifications = Classification.objects.filter(
@@ -90,7 +96,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     classification_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
-        required=True
+        required=False
     )
 
     class Meta:
@@ -111,9 +117,31 @@ class RegisterSerializer(serializers.ModelSerializer):
             'classification_ids',
         ]
 
-    def validate_classification_ids(self, value):
-        get_active_classifications(value)
-        return value
+    def validate(self, attrs):
+        want_to_be_reviewer = attrs.get('want_to_be_reviewer', False)
+        classification_ids = attrs.get('classification_ids')
+
+        if want_to_be_reviewer and classification_ids is None:
+            raise serializers.ValidationError({
+                'classification_ids': [
+                    (
+                        'classification_ids is required when registering '
+                        'as a reviewer.'
+                    )
+                ]
+            })
+
+        if classification_ids is not None:
+            get_active_classifications(
+                classification_ids,
+                min_required=(
+                    MIN_CLASSIFICATIONS_REQUIRED
+                    if want_to_be_reviewer
+                    else None
+                ),
+            )
+
+        return attrs
 
     def create(self, validated_data):
         want_to_be_reviewer = validated_data.pop('want_to_be_reviewer', False)
@@ -146,9 +174,17 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
             user.disciplines.set(disciplines)
 
-        user.classifications.set(
-            get_active_classifications(classification_ids)
-        )
+        if classification_ids is not None:
+            user.classifications.set(
+                get_active_classifications(
+                    classification_ids,
+                    min_required=(
+                        MIN_CLASSIFICATIONS_REQUIRED
+                        if want_to_be_reviewer
+                        else None
+                    ),
+                )
+            )
 
         notify_user(
             user=user,
@@ -196,9 +232,38 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             'classification_ids',
         ]
 
-    def validate_classification_ids(self, value):
-        get_active_classifications(value)
-        return value
+    def validate(self, attrs):
+        wants_reviewer_now = attrs.get(
+            'want_to_be_reviewer',
+            self.instance.is_reviewer,
+        )
+        is_becoming_reviewer = (
+            not self.instance.is_reviewer
+            and wants_reviewer_now
+        )
+        classification_ids = attrs.get('classification_ids')
+
+        if is_becoming_reviewer and classification_ids is None:
+            raise serializers.ValidationError({
+                'classification_ids': [
+                    (
+                        'classification_ids is required when changing '
+                        'from author to reviewer.'
+                    )
+                ]
+            })
+
+        if classification_ids is not None:
+            get_active_classifications(
+                classification_ids,
+                min_required=(
+                    MIN_CLASSIFICATIONS_REQUIRED
+                    if wants_reviewer_now
+                    else None
+                ),
+            )
+
+        return attrs
 
     def update(self, instance, validated_data):
         # Toggle reviewer status
@@ -239,7 +304,14 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
 
         if classification_ids is not None:
             instance.classifications.set(
-                get_active_classifications(classification_ids)
+                get_active_classifications(
+                    classification_ids,
+                    min_required=(
+                        MIN_CLASSIFICATIONS_REQUIRED
+                        if instance.is_reviewer
+                        else None
+                    ),
+                )
             )
 
         return instance

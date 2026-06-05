@@ -19,11 +19,14 @@ from .models import (
     SubmissionFileType,
     SubmissionFile,
     SubmissionReviewerAssignment,
+    SubmissionReviewerReport,
     ReviewerAssignmentStatus,
 )
 from .permissions import (
     IsOwnerOrEditorialStaff,
     IsEditorialManagerOrSuperAdmin,
+    IsEditorOrAbove,
+    IsReviewer,
 )
 from .serializers import (
     ArticleTypeSerializer,
@@ -38,6 +41,11 @@ from .serializers import (
     ReviewerCandidateSerializer,
     AssignReviewerSerializer,
     SubmissionReviewerAssignmentSerializer,
+    ReviewerAssignmentListSerializer,
+    ReviewerAssignmentDetailSerializer,
+    SubmissionReviewerReportSerializer,
+    SubmissionReviewReportListSerializer,
+    EditorDecisionSerializer,
 )
 
 User = get_user_model()
@@ -216,8 +224,23 @@ class SubmissionViewSet(viewsets.ModelViewSet):
     def submit(self, request, pk=None):
         submission = self.get_object()
 
-        serializer = SubmitSubmissionSerializer(data={})
-        serializer.is_valid(raise_exception=True)
+        serializer = SubmitSubmissionSerializer()
+        missing_requirements = serializer.get_missing_requirements(
+            submission
+        )
+
+        if missing_requirements:
+            return Response(
+                {
+                    'detail': (
+                        'Complete all required fields before final '
+                        'submission.'
+                    ),
+                    'missing_requirements': missing_requirements,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer.save(submission)
 
         return Response(
@@ -556,3 +579,211 @@ class AcceptReviewerAssignmentView(ReviewerAssignmentResponseView):
 
 class RejectReviewerAssignmentView(ReviewerAssignmentResponseView):
     response_status = ReviewerAssignmentStatus.REJECTED
+
+
+class ReviewerAssignmentListView(generics.ListAPIView):
+    serializer_class = ReviewerAssignmentListSerializer
+    permission_classes = [IsReviewer]
+    assignment_status = None
+
+    def get_queryset(self):
+        return SubmissionReviewerAssignment.objects.filter(
+            reviewer=self.request.user,
+            status=self.assignment_status,
+            is_active=True,
+        ).select_related(
+            'submission',
+            'submission__author',
+            'submission__article_type',
+            'assigned_by',
+        ).order_by(
+            '-assigned_at'
+        )
+
+
+class ReviewerPendingAssignmentListView(ReviewerAssignmentListView):
+    assignment_status = ReviewerAssignmentStatus.PENDING
+
+
+class ReviewerAcceptedAssignmentListView(ReviewerAssignmentListView):
+    assignment_status = ReviewerAssignmentStatus.ACCEPTED
+
+
+class ReviewerAssignmentDetailView(generics.RetrieveAPIView):
+    serializer_class = ReviewerAssignmentDetailSerializer
+    permission_classes = [IsReviewer]
+
+    def get_queryset(self):
+        return SubmissionReviewerAssignment.objects.filter(
+            reviewer=self.request.user,
+            is_active=True,
+        ).select_related(
+            'submission',
+            'submission__author',
+            'submission__article_type',
+            'assigned_by',
+            'reviewer',
+            'review_report',
+        ).prefetch_related(
+            'reviewer__classifications',
+        )
+
+
+class ReviewerSubmitReportView(APIView):
+    permission_classes = [IsReviewer]
+
+    def post(self, request, pk):
+        assignment = get_object_or_404(
+            SubmissionReviewerAssignment.objects.select_related(
+                'submission',
+                'submission__assigned_editor',
+                'assigned_by',
+                'reviewer',
+            ),
+            pk=pk,
+            reviewer=request.user,
+            is_active=True,
+        )
+
+        if assignment.status != ReviewerAssignmentStatus.ACCEPTED:
+            return Response(
+                {
+                    'detail': (
+                        'Only accepted review assignments can submit a '
+                        'review report.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        report = getattr(assignment, 'review_report', None)
+        is_new_report = report is None
+        was_transferred = (
+            report.ready_to_transfer_to_editor
+            if report else False
+        )
+
+        serializer = SubmissionReviewerReportSerializer(
+            report,
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+        report = serializer.save(assignment=assignment)
+
+        if report.ready_to_transfer_to_editor and not was_transferred:
+            editor = assignment.submission.assigned_editor or assignment.assigned_by
+            if editor:
+                notify_user(
+                    user=editor,
+                    title='Reviewer Report Submitted',
+                    message=(
+                        f'{assignment.reviewer.full_name} has submitted the '
+                        'review report for '
+                        f'"{assignment.submission.title or assignment.submission}".'
+                    ),
+                    notification_type='review',
+                )
+
+        response_status = (
+            status.HTTP_201_CREATED
+            if is_new_report
+            else status.HTTP_200_OK
+        )
+
+        return Response(
+            SubmissionReviewerReportSerializer(report).data,
+            status=response_status,
+        )
+
+
+class SubmissionReviewReportListView(generics.ListAPIView):
+    serializer_class = SubmissionReviewReportListSerializer
+    permission_classes = [IsEditorOrAbove]
+
+    def get_submission(self):
+        return get_object_or_404(
+            accessible_submissions_for(self.request.user),
+            id=self.kwargs['submission_id'],
+        )
+
+    def get_queryset(self):
+        submission = self.get_submission()
+        return SubmissionReviewerReport.objects.filter(
+            assignment__submission=submission,
+            ready_to_transfer_to_editor=True,
+        ).select_related(
+            'assignment',
+            'assignment__reviewer',
+            'assignment__submission',
+        ).prefetch_related(
+            'assignment__reviewer__classifications',
+        )
+
+
+class EditorReviewReportListView(generics.ListAPIView):
+    serializer_class = SubmissionReviewReportListSerializer
+    permission_classes = [IsEditorOrAbove]
+
+    def get_queryset(self):
+        queryset = SubmissionReviewerReport.objects.filter(
+            assignment__submission__in=accessible_submissions_for(
+                self.request.user
+            ),
+            ready_to_transfer_to_editor=True,
+        ).select_related(
+            'assignment',
+            'assignment__reviewer',
+            'assignment__submission',
+            'assignment__submission__author',
+            'assignment__submission__article_type',
+        ).prefetch_related(
+            'assignment__reviewer__classifications',
+        ).order_by(
+            '-submitted_at',
+            '-updated_at',
+        )
+
+        reviewer_id = self.request.query_params.get('reviewer_id')
+        if reviewer_id:
+            queryset = queryset.filter(
+                assignment__reviewer_id=reviewer_id
+            )
+
+        submission_id = self.request.query_params.get('submission_id')
+        if submission_id:
+            queryset = queryset.filter(
+                assignment__submission_id=submission_id
+            )
+
+        return queryset
+
+
+class SubmissionEditorDecisionView(APIView):
+    permission_classes = [IsEditorOrAbove]
+
+    def post(self, request, submission_id):
+        submission = get_object_or_404(
+            accessible_submissions_for(request.user),
+            id=submission_id,
+        )
+
+        serializer = EditorDecisionSerializer(
+            data=request.data,
+            context={'submission': submission},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        submission.status = serializer.validated_data['decision']
+        submission.save(update_fields=['status', 'updated_at'])
+
+        submission.reviewer_assignments.filter(
+            is_active=True
+        ).update(is_active=False)
+
+        return Response(
+            SubmissionSerializer(
+                submission,
+                context={'request': request},
+            ).data,
+            status=status.HTTP_200_OK,
+        )
