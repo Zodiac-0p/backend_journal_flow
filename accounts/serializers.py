@@ -1,12 +1,20 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from journals.models import Classification
 from user_notifications.utils import notify_user
 from .models import RoleChoice, Discipline
+from .utils import (
+    generate_email_verification_otp_for_user,
+    send_email_verification_email,
+)
 
 User = get_user_model()
 
@@ -186,15 +194,8 @@ class RegisterSerializer(serializers.ModelSerializer):
                 )
             )
 
-        notify_user(
-            user=user,
-            title='Welcome to Publication Manager',
-            message=(
-                f'Hello {user.full_name}, your Publication Manager account '
-                'has been created successfully.'
-            ),
-            notification_type='system',
-        )
+        otp = generate_email_verification_otp_for_user(user)
+        send_email_verification_email(user, otp)
 
         return user
 
@@ -331,6 +332,10 @@ class UserSerializer(serializers.ModelSerializer):
             'password',
             'groups',
             'user_permissions',
+            'reset_password_otp',
+            'reset_password_otp_created_at',
+            'email_verification_otp',
+            'email_verification_otp_created_at',
         ]
 
 # ----------------------------------------------------------------------
@@ -377,6 +382,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)
+        if not self.user.is_email_verified:
+            raise AuthenticationFailed(
+                'Please verify your email before logging in.'
+            )
         data['user'] = UserSerializer(self.user).data
         return data
 
@@ -413,3 +422,46 @@ class ResetPasswordSerializer(serializers.Serializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(list(exc.messages))
         return value
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)
+
+    def validate(self, attrs):
+        email = attrs['email'].lower().strip()
+        otp = attrs['otp']
+
+        user = User.objects.filter(email__iexact=email).first()
+        if (
+            not user
+            or not user.email_verification_otp
+            or not user.email_verification_otp_created_at
+        ):
+            raise serializers.ValidationError({
+                'otp': ['Invalid or expired OTP.']
+            })
+
+        expires_at = (
+            user.email_verification_otp_created_at
+            + timezone.timedelta(
+                minutes=settings.EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES
+            )
+        )
+
+        if timezone.now() > expires_at:
+            raise serializers.ValidationError({
+                'otp': ['Invalid or expired OTP.']
+            })
+
+        if not check_password(otp, user.email_verification_otp):
+            raise serializers.ValidationError({
+                'otp': ['Invalid or expired OTP.']
+            })
+
+        attrs['user'] = user
+        return attrs
+
+
+class ResendVerificationEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()

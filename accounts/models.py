@@ -133,6 +133,19 @@ class User(AbstractUser):
         blank=True,
         null=True,
     )
+
+    is_email_verified = models.BooleanField(default=False)
+
+    email_verification_otp = models.CharField(
+        max_length=128,
+        blank=True,
+        null=True,
+    )
+
+    email_verification_otp_created_at = models.DateTimeField(
+        blank=True,
+        null=True,
+    )
     
     # Authentication Settings
     USERNAME_FIELD = 'email'

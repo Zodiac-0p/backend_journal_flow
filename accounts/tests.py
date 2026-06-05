@@ -1,6 +1,8 @@
 from django.urls import reverse
 from django.core import mail
 from django.test import override_settings
+from django.contrib.auth.hashers import make_password
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -137,6 +139,7 @@ class AccountClassificationSelectionTests(APITestCase):
 
         user = User.objects.get(email='new-author@example.com')
         self.assertFalse(user.is_reviewer)
+        self.assertFalse(user.is_email_verified)
         self.assertEqual(user.classifications.count(), 0)
 
     def test_register_reviewer_requires_classifications(self):
@@ -195,6 +198,7 @@ class AccountClassificationSelectionTests(APITestCase):
 
         user = User.objects.get(email='new-reviewer@example.com')
         self.assertTrue(user.is_reviewer)
+        self.assertFalse(user.is_email_verified)
         self.assertEqual(user.classifications.count(), 4)
 
     def test_profile_update_requires_classifications_when_becoming_reviewer(self):
@@ -247,7 +251,7 @@ class AccountClassificationSelectionTests(APITestCase):
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
     )
-    def test_register_sends_email_and_creates_notification(self):
+    def test_register_sends_verification_email_and_creates_notification(self):
         response = self.client.post(
             reverse('register'),
             {
@@ -263,9 +267,117 @@ class AccountClassificationSelectionTests(APITestCase):
 
         user = User.objects.get(email='notified-author@example.com')
         self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('Verify Your Email Address', mail.outbox[0].subject)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=user,
+                title='Verify Your Email',
+            ).exists()
+        )
+
+    def test_unverified_user_cannot_login(self):
+        user = User.objects.create_user(
+            email='unverified@example.com',
+            username='unverified',
+            full_name='Unverified User',
+            password='StrongPass123',
+        )
+
+        response = self.client.post(
+            reverse('login'),
+            {
+                'email': user.email,
+                'password': 'StrongPass123',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn(
+            'Please verify your email before logging in.',
+            str(response.data),
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_verify_email_marks_user_verified_and_sends_welcome_email(self):
+        user = User.objects.create_user(
+            email='verify@example.com',
+            username='verify',
+            full_name='Verify User',
+            password='StrongPass123',
+            email_verification_otp=make_password('123456'),
+            email_verification_otp_created_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            reverse('verify-email'),
+            {
+                'email': user.email,
+                'otp': '123456',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_email_verified)
+        self.assertIsNone(user.email_verification_otp)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(
+            mail.outbox[0].subject,
+            'Welcome to Publication Manager',
+        )
         self.assertTrue(
             Notification.objects.filter(
                 user=user,
                 title='Welcome to Publication Manager',
             ).exists()
         )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_resend_verification_email_sends_new_otp_for_unverified_user(self):
+        user = User.objects.create_user(
+            email='resend@example.com',
+            username='resend',
+            full_name='Resend User',
+            password='StrongPass123',
+        )
+
+        response = self.client.post(
+            reverse('resend-verification-email'),
+            {
+                'email': user.email,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertIsNotNone(user.email_verification_otp)
+        self.assertIsNotNone(user.email_verification_otp_created_at)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_check_email_shows_verify_action_for_unverified_user(self):
+        user = User.objects.create_user(
+            email='check@example.com',
+            username='check',
+            full_name='Check User',
+            password='StrongPass123',
+        )
+
+        response = self.client.post(
+            reverse('check_email'),
+            {
+                'email': user.email,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['action'], 'verify_email')
+        self.assertFalse(response.data['user']['is_email_verified'])

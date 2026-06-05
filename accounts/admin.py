@@ -13,6 +13,7 @@ class CustomUserAdmin(UserAdmin):
         'email',
         'full_name',
         'primary_role',
+        'is_email_verified',
         'is_reviewer',
         'is_editor',
         'is_editorial_manager',
@@ -23,6 +24,7 @@ class CustomUserAdmin(UserAdmin):
 
     # Filters in right sidebar
     list_filter = (
+        'is_email_verified',
         'is_reviewer',
         'is_editor',
         'is_editorial_manager',
@@ -84,6 +86,8 @@ class CustomUserAdmin(UserAdmin):
                 'email',
                 'username',
                 'password',
+                'is_email_verified',
+                'email_verification_otp_created_at',
             )
         }),
 
@@ -136,6 +140,7 @@ class CustomUserAdmin(UserAdmin):
         'updated_at',
         'last_login',
         'date_joined',
+        'email_verification_otp_created_at',
     )
 
 

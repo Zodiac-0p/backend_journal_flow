@@ -13,6 +13,8 @@ from .views import (
     UserListView,
     ForgotPasswordView,
     ResetPasswordView,
+    VerifyEmailView,
+    ResendVerificationEmailView,
 )
 
 # Router for Role Choices and Disciplines
@@ -24,6 +26,12 @@ urlpatterns = [
     # Authentication APIs
     path('check-email/', CheckEmailView.as_view(), name='check_email'),
     path('register/', RegisterView.as_view(), name='register'),
+    path('verify-email/', VerifyEmailView.as_view(), name='verify-email'),
+    path(
+        'resend-verification-email/',
+        ResendVerificationEmailView.as_view(),
+        name='resend-verification-email',
+    ),
     path('login/', LoginView.as_view(), name='login'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 

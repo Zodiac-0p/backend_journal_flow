@@ -83,8 +83,36 @@ Minimum required fields for reviewer registration:
 Notes:
 - classification_ids is required only when want_to_be_reviewer is true.
 - Reviewer registration must include at least 4 active journal classifications.
-- Sends welcome email.
-- Creates an in-app notification.
+- Sends an email verification OTP mail.
+- Creates an in-app notification asking the user to verify email.
+- User must verify email before login.
+
+2A. Verify Email
+POST /api/accounts/verify-email/
+
+Request:
+{
+  "email": "author@example.com",
+  "otp": "123456"
+}
+
+Notes:
+- OTP is 6 digits.
+- OTP expires after EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES from .env.
+- On success, the user receives a welcome email and in-app notification.
+
+2B. Resend Verification Email
+POST /api/accounts/resend-verification-email/
+
+Request:
+{
+  "email": "author@example.com"
+}
+
+Expected response:
+{
+  "message": "If an unverified account exists for this email, a new verification OTP has been sent."
+}
 
 3. Login
 POST /api/accounts/login/
@@ -99,6 +127,12 @@ Save these response values:
 - access
 - refresh
 - user.id
+
+If email is not verified yet, login returns:
+HTTP 401 Unauthorized
+{
+  "detail": "Please verify your email before logging in."
+}
 
 4. Refresh Access Token
 POST /api/accounts/token/refresh/

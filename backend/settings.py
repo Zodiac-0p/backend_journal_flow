@@ -56,6 +56,9 @@ SIMPLE_JWT = {
 PASSWORD_RESET_OTP_EXPIRY_MINUTES = int(
     os.getenv('PASSWORD_RESET_OTP_EXPIRY_MINUTES', '10')
 )
+EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES = int(
+    os.getenv('EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES', '10')
+)
 # ------------------------------------------------------------------------------
 # Installed Apps
 # ------------------------------------------------------------------------------
@@ -158,6 +161,14 @@ REST_FRAMEWORK = {
         'password_reset_confirm': os.getenv(
             'PASSWORD_RESET_CONFIRM_THROTTLE_RATE',
             '5/hour',
+        ),
+        'email_verification': os.getenv(
+            'EMAIL_VERIFICATION_THROTTLE_RATE',
+            '5/hour',
+        ),
+        'email_verification_resend': os.getenv(
+            'EMAIL_VERIFICATION_RESEND_THROTTLE_RATE',
+            '3/hour',
         ),
     },
 }

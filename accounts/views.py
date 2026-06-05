@@ -11,7 +11,11 @@ from rest_framework.generics import ListAPIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 import secrets
 
-from .utils import send_reset_password_email
+from .utils import (
+    send_reset_password_email,
+    generate_email_verification_otp_for_user,
+    send_email_verification_email,
+)
 from user_notifications.utils import notify_user
 from .models import RoleChoice, Discipline
 from .permissions import IsEditorialManagerOrSuperAdmin
@@ -26,6 +30,8 @@ from .serializers import (
     UserListSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
+    VerifyEmailSerializer,
+    ResendVerificationEmailSerializer,
     MIN_CLASSIFICATIONS_REQUIRED,
 )
 
@@ -52,15 +58,22 @@ class CheckEmailView(APIView):
         user = User.objects.filter(email=email).first()
 
         if user:
+            action = 'login' if user.is_email_verified else 'verify_email'
+            message = (
+                'Email is already registered.'
+                if user.is_email_verified
+                else 'Email is registered but not verified yet.'
+            )
             return Response({
                 "exists": True,
-                "action": "login",
-                "message": "Email is already registered.",
+                "action": action,
+                "message": message,
                 "user": {
                     "id": user.id,
                     "email": user.email,
                     "full_name": user.full_name,
                     "primary_role": user.primary_role,
+                    "is_email_verified": user.is_email_verified,
                 }
             })
 
@@ -77,6 +90,17 @@ class CheckEmailView(APIView):
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        response.data = {
+            'message': (
+                'Account created successfully. Please verify your email '
+                'using the OTP sent to your inbox before logging in.'
+            ),
+            'user': response.data,
+        }
+        return response
 
 
 # ----------------------------------------------------------------------
@@ -390,4 +414,64 @@ class ResetPasswordView(APIView):
 
         return Response({
             'message': 'Password reset successful.'
+        })
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'email_verification'
+
+    def post(self, request):
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.validated_data['user']
+        user.is_email_verified = True
+        user.email_verification_otp = None
+        user.email_verification_otp_created_at = None
+        user.save(
+            update_fields=[
+                'is_email_verified',
+                'email_verification_otp',
+                'email_verification_otp_created_at',
+            ]
+        )
+
+        notify_user(
+            user=user,
+            title='Welcome to Publication Manager',
+            message=(
+                f'Hello {user.full_name}, your email has been verified and '
+                'your Publication Manager account is ready to use.'
+            ),
+            notification_type='system',
+        )
+
+        return Response({
+            'message': 'Email verified successfully. You can now log in.'
+        })
+
+
+class ResendVerificationEmailView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'email_verification_resend'
+
+    def post(self, request):
+        serializer = ResendVerificationEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email'].lower().strip()
+        user = User.objects.filter(email__iexact=email).first()
+
+        if user and not user.is_email_verified:
+            otp = generate_email_verification_otp_for_user(user)
+            send_email_verification_email(user, otp)
+
+        return Response({
+            'message': (
+                'If an unverified account exists for this email, a new '
+                'verification OTP has been sent.'
+            )
         })
