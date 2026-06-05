@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+import secrets
 
 MIN_CLASSIFICATIONS_REQUIRED = 4
 
@@ -157,6 +158,8 @@ class ManuscriptClassificationRecommendation(models.TextChoices):
 
 
 class Submission(models.Model):
+    REFERENCE_PREFIX = 'ERX-'
+
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -204,6 +207,12 @@ class Submission(models.Model):
     ethics_accepted = models.BooleanField(default=False)
 
     # Workflow
+    manuscript_reference = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        null=True,
+    )
     status = models.CharField(
         max_length=50,
         choices=SubmissionStatus.choices,
@@ -218,6 +227,13 @@ class Submission(models.Model):
 
     def __str__(self):
         return self.title or f'Draft #{self.pk}'
+
+    @classmethod
+    def generate_manuscript_reference(cls):
+        while True:
+            reference = f'{cls.REFERENCE_PREFIX}{secrets.randbelow(900000) + 100000}'
+            if not cls.objects.filter(manuscript_reference=reference).exists():
+                return reference
 
     @property
     def sections(self):

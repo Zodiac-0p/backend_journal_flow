@@ -493,11 +493,29 @@ class SubmissionEditorAutoAssignmentTests(APITestCase):
 
         submission.refresh_from_db()
         self.assertEqual(submission.assigned_editor, least_loaded_editor)
+        self.assertIsNotNone(submission.manuscript_reference)
+        self.assertTrue(
+            submission.manuscript_reference.startswith('ERX-')
+        )
         self.assertEqual(
             submission.status,
             SubmissionStatus.UNDER_EDITOR_REVIEW,
         )
         self.assertEqual(len(mail.outbox), 2)
+        editor_email = next(
+            email
+            for email in mail.outbox
+            if least_loaded_editor.email in email.to
+        )
+        author_email = next(
+            email
+            for email in mail.outbox
+            if author.email in email.to
+        )
+        self.assertIn(submission.title, editor_email.body)
+        self.assertIn(submission.manuscript_reference, editor_email.body)
+        self.assertIn(submission.title, author_email.body)
+        self.assertIn(submission.manuscript_reference, author_email.body)
         self.assertTrue(
             Notification.objects.filter(
                 user=least_loaded_editor,
@@ -507,7 +525,7 @@ class SubmissionEditorAutoAssignmentTests(APITestCase):
         self.assertTrue(
             Notification.objects.filter(
                 user=author,
-                title='Submission Status Updated',
+                title='Article Submitted Successfully',
             ).exists()
         )
 

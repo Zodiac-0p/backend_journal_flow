@@ -596,11 +596,12 @@ Requirements:
 - ethics_accepted true
 
 Result:
+- manuscript_reference is generated automatically, for example ERX-117446.
 - Active editor with the lowest active assigned submission count is assigned to assigned_editor.
 - Status changes to under_editor_review.
-- Sends status-change email to the author.
+- Sends article submission success email to the author with manuscript_reference and article title.
 - Creates an in-app notification for the author.
-- Sends new-submission assignment email to the assigned editor.
+- Sends new-submission assignment email to the assigned editor with manuscript_reference and article title.
 - Creates an in-app notification for the assigned editor.
 
 If required data is missing, the API returns:

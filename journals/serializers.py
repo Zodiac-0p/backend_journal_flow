@@ -915,6 +915,11 @@ class SubmitSubmissionSerializer(serializers.Serializer):
                 'No active editor is available for assignment.'
             )
 
+        if not submission.manuscript_reference:
+            submission.manuscript_reference = (
+                Submission.generate_manuscript_reference()
+            )
+
         submission.assigned_editor = editor
         submission.status = SubmissionStatus.UNDER_EDITOR_REVIEW
         submission.submitted_at = timezone.now()
@@ -925,7 +930,8 @@ class SubmitSubmissionSerializer(serializers.Serializer):
             title='New Submission Assigned',
             message=(
                 'A new submission has been assigned to you for editor review: '
-                f'"{submission.title or submission}".'
+                f'"{submission.title or submission}" '
+                f'(Reference: {submission.manuscript_reference}).'
             ),
             notification_type='submission',
         )
