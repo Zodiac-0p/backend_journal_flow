@@ -62,6 +62,10 @@ Request:
   "classification_ids": [1, 2, 3, 4]
 }
 
+Notes:
+- classification_ids is optional for normal user registration.
+- classification_ids is required only when want_to_be_reviewer is true.
+
 Minimum required fields:
 {
   "email": "author@example.com",
@@ -81,6 +85,7 @@ Minimum required fields for reviewer registration:
 }
 
 Notes:
+- classification_ids is optional for normal user registration.
 - classification_ids is required only when want_to_be_reviewer is true.
 - Reviewer registration must include at least 4 active journal classifications.
 - Sends an email verification OTP mail.

@@ -155,7 +155,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         want_to_be_reviewer = validated_data.pop('want_to_be_reviewer', False)
         role_choice_id = validated_data.pop('role_choice_id', None)
         discipline_ids = validated_data.pop('discipline_ids', [])
-        classification_ids = validated_data.pop('classification_ids', [])
+        classification_ids = validated_data.pop('classification_ids', None)
         password = validated_data.pop('password')
 
         user = User(**validated_data)
