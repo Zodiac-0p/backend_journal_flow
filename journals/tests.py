@@ -245,8 +245,21 @@ class SubmissionResubmitStatusTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(submission.versions.count(), 0)
 
-    def test_resubmit_allows_minor_revision_status(self):
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_resubmit_allows_minor_revision_status_and_notifies_editor(self):
         submission = self.make_submission(SubmissionStatus.MINOR_REVISION)
+        editor = User.objects.create_user(
+            email='revision-editor@example.com',
+            username='revision-editor',
+            full_name='Revision Editor',
+            password='StrongPass123',
+            is_editor=True,
+        )
+        submission.assigned_editor = editor
+        submission.manuscript_reference = 'ERX-117446'
+        submission.save(update_fields=['assigned_editor', 'manuscript_reference'])
 
         self.client.force_authenticate(self.author)
         response = self.client.post(
@@ -263,6 +276,20 @@ class SubmissionResubmitStatusTests(APITestCase):
         submission.refresh_from_db()
         self.assertEqual(submission.status, SubmissionStatus.SUBMITTED)
         self.assertEqual(submission.versions.count(), 1)
+        self.assertEqual(len(mail.outbox), 2)
+        editor_email = next(
+            email
+            for email in mail.outbox
+            if editor.email in email.to
+        )
+        self.assertIn(submission.title, editor_email.body)
+        self.assertIn(submission.manuscript_reference, editor_email.body)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=editor,
+                title='Revised Submission Received',
+            ).exists()
+        )
 
     def test_resubmit_allows_major_revision_status(self):
         submission = self.make_submission(SubmissionStatus.MAJOR_REVISION)
@@ -974,6 +1001,97 @@ class SubmissionReviewerAssignmentTests(APITestCase):
             response.data[0]['reviewer']['id'],
             self.second_matching_reviewer.id,
         )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_editor_can_send_selected_review_comments_to_author(self):
+        first_assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        second_assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.second_matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        first_report = SubmissionReviewerReport.objects.create(
+            assignment=first_assignment,
+            submitted_at=timezone.now(),
+            **self.make_review_report_payload(),
+        )
+        second_report = SubmissionReviewerReport.objects.create(
+            assignment=second_assignment,
+            submitted_at=timezone.now(),
+            **{
+                **self.make_review_report_payload(),
+                'reviewer_comments_to_author': (
+                    'Please improve the discussion and cite recent work.'
+                ),
+            },
+        )
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.post(
+            reverse(
+                'submission-send-review-comments',
+                kwargs={'submission_id': self.submission.pk},
+            ),
+            {
+                'review_report_ids': [first_report.id, second_report.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+        email_body = mail.outbox[0].body
+        self.assertIn(first_report.reviewer_comments_to_author, email_body)
+        self.assertIn(second_report.reviewer_comments_to_author, email_body)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.author,
+                title='Reviewer Comments Shared',
+            ).exists()
+        )
+
+    def test_editor_cannot_send_invalid_review_report_for_submission(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.matching_reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+            responded_at=timezone.now(),
+            is_active=True,
+        )
+        report = SubmissionReviewerReport.objects.create(
+            assignment=assignment,
+            submitted_at=timezone.now(),
+            ready_to_transfer_to_editor=False,
+            review_report_complete=True,
+            reviewer_comments_to_author='Draft comments only.',
+        )
+
+        self.client.force_authenticate(self.editor)
+        response = self.client.post(
+            reverse(
+                'submission-send-review-comments',
+                kwargs={'submission_id': self.submission.pk},
+            ),
+            {
+                'review_report_ids': [report.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'

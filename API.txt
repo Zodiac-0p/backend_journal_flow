@@ -703,6 +703,8 @@ Testing note:
 - On successful resubmission, the API creates a new submission version and changes the submission status back to submitted.
 - Sends status-change email to the author.
 - Creates an in-app notification for the author.
+- Sends revised-submission email to the assigned editor.
+- Creates an in-app notification for the assigned editor.
 
 Body type:
 multipart/form-data
@@ -1034,6 +1036,33 @@ Example response:
     "updated_at": "2026-06-06T14:10:00+05:30"
   }
 ]
+
+74B. Send Selected Reviewer Comments To Author
+POST /api/journals/submissions/{submission_id}/send-review-comments/
+
+Editor, Editorial Manager, or Super Admin only.
+
+Purpose:
+- Lets the editor select one or more completed reviewer reports and send the reviewer_comments_to_author content to the author by email.
+
+Request:
+{
+  "review_report_ids": [1, 2]
+}
+
+Rules:
+- All selected review reports must belong to the same submission.
+- Only reports with ready_to_transfer_to_editor=true are allowed.
+- At least one selected report must contain reviewer_comments_to_author text.
+- The author receives one email containing the selected reviewer comments.
+- The author also receives an in-app notification.
+
+Success response:
+{
+  "message": "Reviewer comments sent to the author successfully.",
+  "submission_id": 10,
+  "sent_review_report_ids": [1, 2]
+}
 
 75. Submit Editor Decision
 POST /api/journals/submissions/{submission_id}/editor-decision/

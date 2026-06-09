@@ -558,6 +558,53 @@ class EditorDecisionSerializer(serializers.Serializer):
         return attrs
 
 
+class SendReviewCommentsToAuthorSerializer(serializers.Serializer):
+    review_report_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
+
+    def validate(self, attrs):
+        submission = self.context['submission']
+        report_ids = attrs['review_report_ids']
+
+        if len(set(report_ids)) != len(report_ids):
+            raise serializers.ValidationError(
+                'Review report IDs must be unique.'
+            )
+
+        reports = list(
+            SubmissionReviewerReport.objects.filter(
+                id__in=report_ids,
+                assignment__submission=submission,
+                ready_to_transfer_to_editor=True,
+            ).select_related(
+                'assignment',
+                'assignment__reviewer',
+                'assignment__submission',
+            ).order_by('id')
+        )
+
+        if len(reports) != len(report_ids):
+            raise serializers.ValidationError(
+                'One or more review reports are invalid for this submission.'
+            )
+
+        reports_with_comments = [
+            report
+            for report in reports
+            if report.reviewer_comments_to_author.strip()
+        ]
+
+        if not reports_with_comments:
+            raise serializers.ValidationError(
+                'Selected review reports do not contain reviewer comments to author.'
+            )
+
+        self.context['reports'] = reports_with_comments
+        return attrs
+
+
 class AssignReviewerSerializer(serializers.Serializer):
     reviewer_id = serializers.IntegerField(required=False)
     reviewer_ids = serializers.ListField(
@@ -971,5 +1018,18 @@ class ResubmitSerializer(serializers.Serializer):
         submission.status = SubmissionStatus.SUBMITTED
         submission.submitted_at = timezone.now()
         submission.save()
+
+        editor = submission.assigned_editor
+        if editor:
+            notify_user(
+                user=editor,
+                title='Revised Submission Received',
+                message=(
+                    'A revised manuscript has been resubmitted for '
+                    f'"{submission.title or submission}" '
+                    f'(Reference: {submission.manuscript_reference}).'
+                ),
+                notification_type='submission',
+            )
 
         return submission

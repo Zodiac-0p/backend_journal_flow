@@ -20,6 +20,7 @@ from .views import (
     SubmissionReviewReportListView,
     EditorReviewReportListView,
     SubmissionEditorDecisionView,
+    SendReviewCommentsToAuthorView,
 )
 
 router = DefaultRouter()
@@ -103,6 +104,11 @@ urlpatterns = [
         'submissions/<int:submission_id>/editor-decision/',
         SubmissionEditorDecisionView.as_view(),
         name='submission-editor-decision',
+    ),
+    path(
+        'submissions/<int:submission_id>/send-review-comments/',
+        SendReviewCommentsToAuthorView.as_view(),
+        name='submission-send-review-comments',
     ),
 ]
 

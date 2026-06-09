@@ -7,6 +7,8 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.core.mail import send_mail
+from django.conf import settings
 
 from user_notifications.utils import notify_user
 from .models import (
@@ -46,6 +48,7 @@ from .serializers import (
     SubmissionReviewerReportSerializer,
     SubmissionReviewReportListSerializer,
     EditorDecisionSerializer,
+    SendReviewCommentsToAuthorSerializer,
 )
 
 User = get_user_model()
@@ -785,5 +788,75 @@ class SubmissionEditorDecisionView(APIView):
                 submission,
                 context={'request': request},
             ).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class SendReviewCommentsToAuthorView(APIView):
+    permission_classes = [IsEditorOrAbove]
+
+    def post(self, request, submission_id):
+        submission = get_object_or_404(
+            accessible_submissions_for(request.user),
+            id=submission_id,
+        )
+
+        serializer = SendReviewCommentsToAuthorSerializer(
+            data=request.data,
+            context={'submission': submission},
+        )
+        serializer.is_valid(raise_exception=True)
+        reports = serializer.context['reports']
+
+        comment_sections = []
+        for index, report in enumerate(reports, start=1):
+            reviewer_name = report.assignment.reviewer.full_name
+            comment_sections.append(
+                (
+                    f'Reviewer {index}: {reviewer_name}\n'
+                    f'{report.reviewer_comments_to_author.strip()}'
+                )
+            )
+
+        manuscript_title = submission.title or f'Submission #{submission.id}'
+        reference_text = (
+            f' ({submission.manuscript_reference})'
+            if submission.manuscript_reference
+            else ''
+        )
+        comments_body = '\n\n'.join(comment_sections)
+        email_message = (
+            f'Hello {submission.author.full_name},\n\n'
+            f'The editor has shared completed reviewer comments for your '
+            f'article "{manuscript_title}"{reference_text}.\n\n'
+            f'{comments_body}\n\n'
+            'Publication Manager'
+        )
+
+        send_mail(
+            subject='Reviewer Comments for Your Submission',
+            message=email_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[submission.author.email],
+            fail_silently=False,
+        )
+
+        notify_user(
+            user=submission.author,
+            title='Reviewer Comments Shared',
+            message=(
+                'The editor has shared reviewer comments for your submission '
+                f'"{manuscript_title}"{reference_text}.'
+            ),
+            notification_type='submission',
+            send_email=False,
+        )
+
+        return Response(
+            {
+                'message': 'Reviewer comments sent to the author successfully.',
+                'submission_id': submission.id,
+                'sent_review_report_ids': [report.id for report in reports],
+            },
             status=status.HTTP_200_OK,
         )
