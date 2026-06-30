@@ -1,6 +1,7 @@
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q
+from django.db import transaction
 from rest_framework import serializers
 
 from user_notifications.utils import notify_user
@@ -242,23 +243,32 @@ class ReviewerAssignmentSubmissionSerializer(serializers.ModelSerializer):
         source='article_type.name',
         read_only=True,
     )
+    
+    # ✅ Add this exactly as it appears in your main serializer
+    submission_files = SubmissionFileSerializer(
+        many=True,
+        read_only=True,
+    )
 
     class Meta:
         model = Submission
         fields = [
             'id',
             'title',
+            'abstract',           # ✅ Fixed: Abstract is now sent
+            'keywords',           # ✅ Fixed: Keywords are now sent
+            'open_access',        
             'status',
             'author',
             'author_name',
             'article_type',
             'article_type_name',
+            'submission_files',   # ✅ Fixed: Files are now sent using the correct DB name
             'submitted_at',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = fields
-
+        read_only_fields = fields       
 
 class SubmissionReviewerReportSerializer(serializers.ModelSerializer):
     class Meta:
@@ -998,38 +1008,53 @@ class ResubmitSerializer(serializers.Serializer):
     )
 
     def save(self, submission, user):
-        latest_version = submission.versions.first()
-        next_version = (
-            1 if not latest_version
-            else latest_version.version_number + 1
-        )
+        with transaction.atomic():
+            # 1. Locate and update the existing Manuscript file row in place
+            # file_type_id=12 corresponds to your 'Manuscript' configuration type
+            active_manuscript = submission.submission_files.filter(file_type_id=12).first()
+            uploaded_file = self.validated_data['manuscript_file']
 
-        SubmissionVersion.objects.create(
-            submission=submission,
-            version_number=next_version,
-            manuscript_file=self.validated_data['manuscript_file'],
-            revision_notes=self.validated_data.get(
-                'revision_notes',
-                ''
-            ),
-            uploaded_by=user,
-        )
+            if active_manuscript:
+                # Replace the old file path reference with the new file upload
+                active_manuscript.file = uploaded_file
+                active_manuscript.original_filename = uploaded_file.name
+                active_manuscript.save()
+            else:
+                # Fallback safeguard: create the record if it didn't exist
+                SubmissionFile.objects.create(
+                    submission=submission,
+                    file_type_id=12, 
+                    file=uploaded_file,
+                    original_filename=uploaded_file.name,
+                    uploaded_by=user
+                )
 
-        submission.status = SubmissionStatus.SUBMITTED
-        submission.submitted_at = timezone.now()
-        submission.save()
+            # 2. Deactivate previous reviewer assignments (is_active = False)
+            # This unlocks the reviewer pool so the same reviewers become eligible again
+            submission.reviewer_assignments.filter(is_active=True).update(is_active=False)
 
-        editor = submission.assigned_editor
-        if editor:
-            notify_user(
-                user=editor,
-                title='Revised Submission Received',
-                message=(
-                    'A revised manuscript has been resubmitted for '
-                    f'"{submission.title or submission}" '
-                    f'(Reference: {submission.manuscript_reference}).'
-                ),
-                notification_type='submission',
-            )
+            # 3. Update submission metadata and forward status straight to review stage
+            submission.status = SubmissionStatus.UNDER_EDITOR_REVIEW
+            submission.submitted_at = timezone.now()
+            
+            # Save revision notes directly to the submission instance if the tracking field exists
+            if hasattr(submission, 'latest_revision_notes'):
+                submission.latest_revision_notes = self.validated_data.get('revision_notes', '')
+                
+            submission.save()
+
+            # 4. Notify the assigned editor using your utilities layout
+            editor = submission.assigned_editor
+            if editor:
+                notify_user(
+                    user=editor,
+                    title='Revised Submission Received',
+                    message=(
+                        'A revised manuscript has been resubmitted for '
+                        f'"{submission.title or submission}" '
+                        f'(Reference: {submission.manuscript_reference}).'
+                    ),
+                    notification_type='submission',
+                )
 
         return submission

@@ -158,7 +158,7 @@ class ManuscriptClassificationRecommendation(models.TextChoices):
 
 
 class Submission(models.Model):
-    REFERENCE_PREFIX = 'ERX-'
+    REFERENCE_PREFIX = 'JBSIP-'
 
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
