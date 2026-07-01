@@ -267,6 +267,8 @@ class ReviewerAssignmentSubmissionSerializer(serializers.ModelSerializer):
             'submitted_at',
             'created_at',
             'updated_at',
+            'manuscript_reference',
+            # 'journal',
         ]
         read_only_fields = fields       
 

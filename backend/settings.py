@@ -225,7 +225,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # ------------------------------------------------------------------------------
 EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND',
-    'django.core.mail.backends.console.EmailBackend',
+    'django.core.mail.backends.smtp.EmailBackend',
 )
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
@@ -241,3 +241,4 @@ DEFAULT_FROM_EMAIL = os.getenv(
 # Default Auto Field
 # ------------------------------------------------------------------------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# Force reload
