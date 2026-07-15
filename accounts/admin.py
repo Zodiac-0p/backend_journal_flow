@@ -12,6 +12,7 @@ class CustomUserAdmin(UserAdmin):
     list_display = (
         'email',
         'full_name',
+        'country',
         'primary_role',
         'is_email_verified',
         'is_reviewer',
@@ -44,6 +45,7 @@ class CustomUserAdmin(UserAdmin):
         'phone',
         'affiliation',
         'organization',
+        'country',
         'job_title',
         'expertise',
         'classifications__name',
@@ -97,6 +99,7 @@ class CustomUserAdmin(UserAdmin):
                 'phone',
                 'affiliation',
                 'organization',
+                'country',
                 'job_title',
                 'expertise',
                 'role_choice',

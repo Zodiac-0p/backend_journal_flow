@@ -14,6 +14,8 @@ from .models import RoleChoice, Discipline
 from .utils import (
     generate_email_verification_otp_for_user,
     send_email_verification_email,
+    generate_temporary_password,
+    send_editor_account_credentials_email,
 )
 
 User = get_user_model()
@@ -117,6 +119,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             'phone',
             'affiliation',
             'organization',
+            'country',
             'job_title',
             'expertise',
             'want_to_be_reviewer',
@@ -200,6 +203,118 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+class CreateEditorAccountSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(required=False, allow_blank=True)
+    role_choice_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    discipline_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            'email',
+            'username',
+            'full_name',
+            'phone',
+            'affiliation',
+            'organization',
+            'country',
+            'job_title',
+            'expertise',
+            'role_choice_id',
+            'discipline_ids',
+        ]
+
+    def validate_email(self, value):
+        return value.lower().strip()
+
+    def validate_role_choice_id(self, value):
+        if value is None:
+            return value
+
+        if not RoleChoice.objects.filter(id=value, is_active=True).exists():
+            raise serializers.ValidationError('Select a valid active role choice.')
+
+        return value
+
+    def validate_discipline_ids(self, value):
+        unique_ids = list(dict.fromkeys(value))
+        disciplines = Discipline.objects.filter(
+            id__in=unique_ids,
+            is_active=True,
+        )
+
+        if disciplines.count() != len(unique_ids):
+            raise serializers.ValidationError(
+                'One or more selected disciplines are invalid or inactive.'
+            )
+
+        return unique_ids
+
+    def validate_username(self, value):
+        return value.strip()
+
+    def _generate_unique_username(self, email):
+        base = (email.split('@')[0] or 'editor').strip()[:150] or 'editor'
+        candidate = base
+        counter = 1
+
+        while User.objects.filter(username=candidate).exists():
+            suffix = str(counter)
+            candidate = f"{base[:150 - len(suffix)]}{suffix}"
+            counter += 1
+
+        return candidate
+
+    def create(self, validated_data):
+        role_choice_id = validated_data.pop('role_choice_id', None)
+        discipline_ids = validated_data.pop('discipline_ids', [])
+        username = validated_data.pop('username', '').strip()
+        created_by = self.context['created_by']
+        temporary_password = generate_temporary_password()
+
+        if not username:
+            username = self._generate_unique_username(validated_data['email'])
+
+        user = User(
+            **validated_data,
+            username=username,
+            is_editor=True,
+            is_email_verified=True,
+        )
+        user.set_password(temporary_password)
+
+        if role_choice_id:
+            user.role_choice = RoleChoice.objects.get(
+                id=role_choice_id,
+                is_active=True,
+            )
+
+        user.save()
+
+        if discipline_ids:
+            disciplines = Discipline.objects.filter(
+                id__in=discipline_ids,
+                is_active=True,
+            )
+            user.disciplines.set(disciplines)
+
+        send_editor_account_credentials_email(
+            user=user,
+            temporary_password=temporary_password,
+            created_by=created_by,
+        )
+        self.context['temporary_password'] = temporary_password
+        return user
+
+
 # ----------------------------------------------------------------------
 # Profile Update Serializer
 # ----------------------------------------------------------------------
@@ -227,6 +342,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             'expertise',
             'job_title',
             'organization',
+            'country',
             'want_to_be_reviewer',
             'role_choice_id',
             'discipline_ids',
@@ -362,6 +478,7 @@ class UserListSerializer(serializers.ModelSerializer):
             'is_super_admin',
             'job_title',
             'organization',
+            'country',
             'role_choice_name',
             'is_active',
             'created_at',
@@ -423,6 +540,16 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(list(exc.messages))
         return value
 
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, min_length=8)
+
+    def validate_new_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
 
 class VerifyEmailSerializer(serializers.Serializer):
     email = serializers.EmailField()

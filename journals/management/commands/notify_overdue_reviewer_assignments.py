@@ -81,6 +81,7 @@ class Command(BaseCommand):
                     'needed.'
                 ),
                 notification_type='review',
+                submission=assignment.submission,
             )
 
             assignment.reviewer_response_reminder_sent_at = now

@@ -63,4 +63,5 @@ def notify_author_on_submission_status_change(
         title=title,
         message=message,
         notification_type='submission',
+        submission=instance,
     )

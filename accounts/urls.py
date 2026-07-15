@@ -1,7 +1,5 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
-
 from .views import (
     RegisterView,
     LoginView,
@@ -11,10 +9,14 @@ from .views import (
     RoleChoiceViewSet,
     DisciplineViewSet,
     UserListView,
+    CreateEditorAccountView,
     ForgotPasswordView,
     ResetPasswordView,
+    ChangePasswordView,
     VerifyEmailView,
     ResendVerificationEmailView,
+    CookieTokenRefreshView,
+    LogoutView,
 )
 
 # Router for Role Choices and Disciplines
@@ -33,11 +35,17 @@ urlpatterns = [
         name='resend-verification-email',
     ),
     path('login/', LoginView.as_view(), name='login'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('logout/', LogoutView.as_view(), name='logout'),
+    path('token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
 
     # Profile APIs (GET and PATCH in same endpoint)
     path('profile/', ProfileView.as_view(), name='profile'),
     path('users/', UserListView.as_view(), name='user_list'),
+    path(
+        'users/create-editor/',
+        CreateEditorAccountView.as_view(),
+        name='create_editor_account',
+    ),
     # Promote any existing user to reviewer
     path('users/<int:user_id>/make-reviewer/', PromoteToReviewerView.as_view(), name='make_reviewer'),
 
@@ -51,6 +59,12 @@ urlpatterns = [
         'reset-password/',
         ResetPasswordView.as_view(),
         name='reset-password',
+    ),
+
+    path(
+        'change-password/',
+        ChangePasswordView.as_view(),
+        name='change-password',
     ),
 ]
 

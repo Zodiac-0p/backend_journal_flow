@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 import secrets
 
 from .utils import (
@@ -23,6 +23,7 @@ from .serializers import (
     RegisterSerializer,
     UserSerializer,
     ProfileUpdateSerializer,
+    CreateEditorAccountSerializer,
     CustomTokenObtainPairSerializer,
     EmailCheckSerializer,
     RoleChoiceSerializer,
@@ -30,6 +31,7 @@ from .serializers import (
     UserListSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
+    ChangePasswordSerializer,
     VerifyEmailSerializer,
     ResendVerificationEmailSerializer,
     MIN_CLASSIFICATIONS_REQUIRED,
@@ -110,6 +112,63 @@ class LoginView(TokenObtainPairView):
     permission_classes = [AllowAny]
     serializer_class = CustomTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            refresh_token = response.data.get('refresh')
+            if refresh_token:
+                response.set_cookie(
+                    key='refresh_token',
+                    value=refresh_token,
+                    httponly=True,
+                    secure=False,  # Set to False for local development
+                    samesite='Lax',
+                )
+                del response.data['refresh']
+        return response
+
+
+class CookieTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get('refresh_token')
+        if not refresh_token:
+            return Response(
+                {"detail": "No refresh token found in cookies."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        request.data['refresh'] = refresh_token
+
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception as e:
+            return Response(
+                {"detail": getattr(e, 'detail', str(e))},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if response.status_code == 200 and 'refresh' in response.data:
+            new_refresh = response.data.get('refresh')
+            response.set_cookie(
+                key='refresh_token',
+                value=new_refresh,
+                httponly=True,
+                secure=False,
+                samesite='Lax',
+            )
+            del response.data['refresh']
+
+        return response
+
+
+class LogoutView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        response = Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
+        response.delete_cookie('refresh_token')
+        return response
+
 
 # ----------------------------------------------------------------------
 # Get and update logged-in user profile
@@ -134,6 +193,38 @@ class ProfileView(APIView):
 #List all users with optional role filter
 # Allowed for Editorial Manager and Super Admin
 # ---------------------------------------------------------------------
+class CreateEditorAccountView(generics.CreateAPIView):
+    serializer_class = CreateEditorAccountSerializer
+    permission_classes = [IsEditorialManagerOrSuperAdmin]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['created_by'] = self.request.user
+        return context
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        response_data = {
+            'message': (
+                'Editor account created successfully. Login credentials '
+                'have been emailed to the editor.'
+            ),
+            'user': UserSerializer(user).data,
+        }
+        
+        # Include temporary password in response for local development convenience
+        if 'temporary_password' in serializer.context:
+            response_data['temporary_password'] = serializer.context['temporary_password']
+
+        return Response(
+            response_data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class UserListView(ListAPIView):
     """
     List all users.
@@ -414,6 +505,37 @@ class ResetPasswordView(APIView):
 
         return Response({
             'message': 'Password reset successful.'
+        })
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        if not user.check_password(serializer.validated_data['old_password']):
+            return Response(
+                {"old_password": ["Wrong password."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(serializer.validated_data['new_password'])
+        user.save(update_fields=['password'])
+
+        notify_user(
+            user=user,
+            title='Password Changed Successfully',
+            message=(
+                'Your Publication Manager password has been successfully changed.'
+            ),
+            notification_type='system',
+        )
+
+        return Response({
+            'message': 'Password changed successfully.'
         })
 
 

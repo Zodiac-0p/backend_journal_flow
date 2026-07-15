@@ -131,6 +131,7 @@ class AccountClassificationSelectionTests(APITestCase):
                 'username': 'new-author',
                 'full_name': 'New Author',
                 'password': 'StrongPass123',
+                'country': 'India',
             },
             format='json',
         )
@@ -140,6 +141,7 @@ class AccountClassificationSelectionTests(APITestCase):
         user = User.objects.get(email='new-author@example.com')
         self.assertFalse(user.is_reviewer)
         self.assertFalse(user.is_email_verified)
+        self.assertEqual(user.country, 'India')
         self.assertEqual(user.classifications.count(), 0)
 
     def test_register_reviewer_requires_classifications(self):
@@ -234,6 +236,7 @@ class AccountClassificationSelectionTests(APITestCase):
             reverse('profile'),
             {
                 'want_to_be_reviewer': True,
+                'country': 'India',
                 'classification_ids': [
                     classification.id
                     for classification in self.classifications
@@ -246,6 +249,7 @@ class AccountClassificationSelectionTests(APITestCase):
 
         user.refresh_from_db()
         self.assertTrue(user.is_reviewer)
+        self.assertEqual(user.country, 'India')
         self.assertEqual(user.classifications.count(), 4)
 
     @override_settings(
@@ -381,3 +385,127 @@ class AccountClassificationSelectionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['action'], 'verify_email')
         self.assertFalse(response.data['user']['is_email_verified'])
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_forgot_password_succeeds_for_author(self):
+        user = User.objects.create_user(
+            email='testauthor@example.com',
+            username='testauthor',
+            full_name='Test Author',
+            password='StrongPass123',
+            is_email_verified=True,
+        )
+        response = self.client.post(
+            reverse('forgot-password'),
+            {'email': user.email},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertIsNotNone(user.reset_password_otp)
+        self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_forgot_password_fails_for_editor(self):
+        user = User.objects.create_user(
+            email='testeditor@example.com',
+            username='testeditor',
+            full_name='Test Editor',
+            password='StrongPass123',
+            is_editor=True,
+            is_email_verified=True,
+        )
+        response = self.client.post(
+            reverse('forgot-password'),
+            {'email': user.email},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertIsNone(user.reset_password_otp)
+
+
+
+class CreateEditorAccountTests(APITestCase):
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            email='editorial-manager@example.com',
+            username='editorial-manager',
+            full_name='Editorial Manager',
+            password='StrongPass123',
+            is_editorial_manager=True,
+            is_email_verified=True,
+        )
+        self.author = User.objects.create_user(
+            email='plain-author@example.com',
+            username='plain-author',
+            full_name='Plain Author',
+            password='StrongPass123',
+            is_email_verified=True,
+        )
+        self.role_choice = RoleChoice.objects.create(name='Professor')
+        self.discipline = Discipline.objects.create(name='Computer Science')
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_editorial_manager_can_create_editor_account(self):
+        self.client.force_authenticate(self.manager)
+        response = self.client.post(
+            reverse('create_editor_account'),
+            {
+                'email': 'new-editor@example.com',
+                'full_name': 'New Editor',
+                'phone': '9876543210',
+                'affiliation': 'ABC University',
+                'organization': 'ABC University',
+                'country': 'India',
+                'job_title': 'Associate Editor',
+                'expertise': 'Artificial Intelligence',
+                'role_choice_id': self.role_choice.id,
+                'discipline_ids': [self.discipline.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(email='new-editor@example.com')
+        self.assertTrue(user.is_editor)
+        self.assertTrue(user.is_email_verified)
+        self.assertEqual(user.country, 'India')
+        self.assertEqual(user.role_choice, self.role_choice)
+        self.assertTrue(user.disciplines.filter(id=self.discipline.id).exists())
+        self.assertEqual(len(mail.outbox), 1)
+        email_body = mail.outbox[0].body
+        self.assertIn(self.manager.email, email_body)
+        self.assertIn(user.email, email_body)
+        temp_password = None
+        for line in email_body.splitlines():
+            if line.startswith('Temporary Password: '):
+                temp_password = line.split('Temporary Password: ', 1)[1].strip()
+                break
+        self.assertTrue(temp_password)
+        self.assertTrue(user.check_password(temp_password))
+        self.assertTrue(
+            Notification.objects.filter(
+                user=user,
+                title='Editor Account Created',
+            ).exists()
+        )
+
+    def test_non_manager_cannot_create_editor_account(self):
+        self.client.force_authenticate(self.author)
+        response = self.client.post(
+            reverse('create_editor_account'),
+            {
+                'email': 'blocked-editor@example.com',
+                'full_name': 'Blocked Editor',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

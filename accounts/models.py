@@ -78,6 +78,12 @@ class User(AbstractUser):
         null=True
     )
 
+    country = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True
+    )
+
     # Professional Information
     job_title = models.CharField(
         max_length=255,

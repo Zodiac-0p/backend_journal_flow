@@ -410,6 +410,7 @@ class SubmissionReviewerAssignmentSerializer(serializers.ModelSerializer):
             'status',
             'responded_at',
             'reviewer_response_reminder_sent_at',
+            'reviewer_report_reminder_sent_at',
             'is_active',
         ]
         read_only_fields = [
@@ -421,6 +422,7 @@ class SubmissionReviewerAssignmentSerializer(serializers.ModelSerializer):
             'status',
             'responded_at',
             'reviewer_response_reminder_sent_at',
+            'reviewer_report_reminder_sent_at',
             'is_active',
         ]
 
@@ -443,6 +445,7 @@ class ReviewerAssignmentListSerializer(serializers.ModelSerializer):
             'status',
             'responded_at',
             'reviewer_response_reminder_sent_at',
+            'reviewer_report_reminder_sent_at',
             'is_active',
         ]
         read_only_fields = fields
@@ -469,6 +472,7 @@ class ReviewerAssignmentDetailSerializer(serializers.ModelSerializer):
             'status',
             'responded_at',
             'reviewer_response_reminder_sent_at',
+            'reviewer_report_reminder_sent_at',
             'is_active',
             'review_report',
         ]
@@ -721,6 +725,7 @@ class AssignReviewerSerializer(serializers.Serializer):
                 assignment.status = ReviewerAssignmentStatus.PENDING
                 assignment.responded_at = None
                 assignment.reviewer_response_reminder_sent_at = None
+                assignment.reviewer_report_reminder_sent_at = None
                 assignment.assigned_by = assigned_by
                 assignment.save(
                     update_fields=[
@@ -728,6 +733,7 @@ class AssignReviewerSerializer(serializers.Serializer):
                         'status',
                         'responded_at',
                         'reviewer_response_reminder_sent_at',
+                        'reviewer_report_reminder_sent_at',
                         'assigned_by',
                     ]
                 )
@@ -966,7 +972,7 @@ class SubmitSubmissionSerializer(serializers.Serializer):
             )
         ).order_by(
             'active_submission_count',
-            'id',
+            '?',
         ).first()
 
         if not editor:

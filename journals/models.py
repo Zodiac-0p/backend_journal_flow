@@ -447,6 +447,10 @@ class SubmissionReviewerAssignment(models.Model):
         null=True,
         blank=True
     )
+    reviewer_report_reminder_sent_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

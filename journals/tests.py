@@ -1291,6 +1291,9 @@ class SubmissionReviewerAssignmentTests(APITestCase):
             assigned_by=self.editor,
         )
 
+        assignment.submission.manuscript_reference = 'ERX-123456'
+        assignment.submission.save(update_fields=['manuscript_reference'])
+
         self.client.force_authenticate(self.matching_reviewer)
         response = self.client.post(
             reverse(
@@ -1315,6 +1318,14 @@ class SubmissionReviewerAssignmentTests(APITestCase):
                 title='Reviewer Assignment Response',
             ).exists()
         )
+
+        email_body = mail.outbox[0].body
+        self.assertIn('ERX-123456', email_body)
+        notification = Notification.objects.get(
+            user=self.editor,
+            title='Reviewer Assignment Response',
+        )
+        self.assertIn('ERX-123456', notification.message)
 
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
@@ -1402,6 +1413,9 @@ class OverdueReviewerAssignmentNotificationTests(APITestCase):
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
     )
     def test_command_notifies_editor_for_pending_assignment_after_three_days(self):
+        self.submission.manuscript_reference = 'ERX-123456'
+        self.submission.save(update_fields=['manuscript_reference'])
+
         assignment = SubmissionReviewerAssignment.objects.create(
             submission=self.submission,
             reviewer=self.reviewer,
@@ -1425,6 +1439,14 @@ class OverdueReviewerAssignmentNotificationTests(APITestCase):
                 title='Reviewer Response Overdue',
             ).exists()
         )
+
+        email_body = mail.outbox[0].body
+        self.assertIn('ERX-123456', email_body)
+        notification = Notification.objects.get(
+            user=self.editor,
+            title='Reviewer Response Overdue',
+        )
+        self.assertIn('ERX-123456', notification.message)
 
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
@@ -1468,6 +1490,83 @@ class OverdueReviewerAssignmentNotificationTests(APITestCase):
             Notification.objects.filter(
                 user=self.editor,
                 title='Reviewer Response Overdue',
+            ).count(),
+            1,
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_command_notifies_reviewer_for_accepted_assignment_after_fifteen_days(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+        )
+        overdue_time = timezone.now() - timedelta(days=15, minutes=1)
+        SubmissionReviewerAssignment.objects.filter(
+            pk=assignment.pk
+        ).update(assigned_at=overdue_time)
+
+        call_command('notify_overdue_reviewer_reports')
+
+        assignment.refresh_from_db()
+        self.assertIsNotNone(
+            assignment.reviewer_report_reminder_sent_at
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.reviewer,
+                title='Review Report Reminder',
+            ).exists()
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_command_does_not_notify_recent_accepted_assignment(self):
+        SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+        )
+
+        call_command('notify_overdue_reviewer_reports')
+
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(
+            Notification.objects.filter(
+                user=self.reviewer,
+                title='Review Report Reminder',
+            ).exists()
+        )
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'
+    )
+    def test_command_does_not_notify_reviewer_twice(self):
+        assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+        )
+        overdue_time = timezone.now() - timedelta(days=15, minutes=1)
+        SubmissionReviewerAssignment.objects.filter(
+            pk=assignment.pk
+        ).update(assigned_at=overdue_time)
+
+        call_command('notify_overdue_reviewer_reports')
+        call_command('notify_overdue_reviewer_reports')
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.reviewer,
+                title='Review Report Reminder',
             ).count(),
             1,
         )

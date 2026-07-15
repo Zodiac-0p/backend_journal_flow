@@ -54,6 +54,7 @@ Request:
   "phone": "9876543210",
   "affiliation": "ABC University",
   "organization": "ABC University",
+  "country": "India",
   "job_title": "Research Scholar",
   "expertise": "Artificial Intelligence",
   "want_to_be_reviewer": true,
@@ -199,6 +200,7 @@ Request:
   "phone": "9876543210",
   "affiliation": "Signal Semitech Pvt Ltd",
   "organization": "Signal Semitech Pvt Ltd",
+  "country": "India",
   "job_title": "Software Developer",
   "expertise": "Machine Learning, Artificial Intelligence",
   "role_choice_id": 1,
@@ -324,6 +326,36 @@ HTTP 400 Bad Request
 {
   "detail": "User must have at least 4 active classifications before becoming a reviewer."
 }
+
+
+24. Create Editor Account
+POST /api/accounts/users/create-editor/
+
+Editorial Manager or Super Admin only.
+
+Request:
+{
+  "email": "editor@example.com",
+  "username": "editor1",
+  "full_name": "Editor One",
+  "phone": "9876543210",
+  "affiliation": "ABC University",
+  "organization": "ABC University",
+  "country": "India",
+  "job_title": "Associate Editor",
+  "expertise": "Artificial Intelligence",
+  "role_choice_id": 1,
+  "discipline_ids": [1, 2]
+}
+
+Notes:
+- username is optional. If not provided, it is auto-generated from the email address.
+- The created account is marked as an Editor account.
+- A random temporary password is generated automatically.
+- The created editor receives an email containing login credentials.
+- The credential email includes the name and email of the Editorial Manager or Super Admin who created the account.
+- The created editor also receives an in-app notification.
+- The created editor account is email-verified automatically so the credentials work immediately.
 
 ############################################################
 SECTION 2: JOURNALS API

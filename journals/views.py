@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db.models import Q
 
 from user_notifications.utils import notify_user
 from .models import (
@@ -63,9 +64,11 @@ def accessible_submissions_for(user):
     if (
         user.is_super_admin
         or user.is_editorial_manager
-        or user.is_editor
     ):
         return queryset
+
+    if user.is_editor:
+        return queryset.filter(Q(assigned_editor=user) | Q(author=user))
 
     return queryset.filter(author=user)
 
@@ -568,6 +571,7 @@ class ReviewerAssignmentResponseView(APIView):
                     f'"{assignment.submission.title or assignment.submission}".'
                 ),
                 notification_type='review',
+                submission=assignment.submission,
             )
 
         return Response(
@@ -685,6 +689,7 @@ class ReviewerSubmitReportView(APIView):
                         f'"{assignment.submission.title or assignment.submission}".'
                     ),
                     notification_type='review',
+                    submission=assignment.submission,
                 )
 
         response_status = (
@@ -850,6 +855,7 @@ class SendReviewCommentsToAuthorView(APIView):
             ),
             notification_type='submission',
             send_email=False,
+            submission=submission,
         )
 
         return Response(
