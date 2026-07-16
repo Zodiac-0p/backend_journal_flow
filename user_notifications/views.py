@@ -52,10 +52,20 @@ class NotificationUnreadCountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        count = Notification.objects.filter(
+        unread_notifications = Notification.objects.filter(
             user=request.user,
             is_read=False,
-        ).count()
+        )
+        count = unread_notifications.count()
+        
+        role_changed_qs = unread_notifications.filter(title='Role Changed')
+        role_changed = role_changed_qs.exists()
+        
+        # Auto-mark as read so it doesn't trigger again on relogin
+        if role_changed:
+            role_changed_qs.update(is_read=True)
+
         return Response({
-            'unread_count': count
+            'unread_count': count,
+            'role_changed': role_changed,
         })

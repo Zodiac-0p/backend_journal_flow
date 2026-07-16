@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.mail import send_mail
+from django.template.loader import render_to_string
 
 from .models import Notification
 
@@ -30,6 +31,18 @@ def notify_user(
     submission=None,
 ):
     message = _append_submission_reference(message, submission)
+    
+    manuscript_reference = getattr(submission, 'manuscript_reference', None) if submission else None
+    
+    # Generate an action URL based on role if a submission is present
+    action_url = None
+    if submission:
+        if user.role in ['editor', 'editorial_manager', 'super_admin'] or user.is_editorial_manager or getattr(user, 'is_superuser', False):
+            action_url = f"http://localhost:5173/manager/assign-reviewers/{submission.id}"
+        elif user.role == 'reviewer':
+            action_url = f"http://localhost:5173/revision"
+        else:
+            action_url = f"http://localhost:5173/articles"
 
     notification = Notification.objects.create(
         user=user,
@@ -39,11 +52,19 @@ def notify_user(
     )
 
     if send_email and user.email:
+        html_message = render_to_string('emails/notification.html', {
+            'user_full_name': user.full_name or "User",
+            'title': title,
+            'message': message,
+            'manuscript_reference': manuscript_reference,
+            'action_url': action_url,
+        })
         send_mail(
             subject=title,
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
+            html_message=html_message,
             fail_silently=True,
         )
 

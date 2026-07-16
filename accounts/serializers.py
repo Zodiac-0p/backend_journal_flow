@@ -463,6 +463,7 @@ class UserListSerializer(serializers.ModelSerializer):
         source='role_choice.name',
         read_only=True
     )
+    classifications = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -478,11 +479,18 @@ class UserListSerializer(serializers.ModelSerializer):
             'is_super_admin',
             'job_title',
             'organization',
+            'affiliation',
+            'expertise',
             'country',
             'role_choice_name',
+            'classifications',
             'is_active',
             'created_at',
         ]
+
+    def get_classifications(self, obj):
+        # Return discipline IDs so frontend can count them
+        return list(obj.disciplines.values_list('id', flat=True))
 # ----------------------------------------------------------------------
 # JWT Login Serializer
 # ----------------------------------------------------------------------

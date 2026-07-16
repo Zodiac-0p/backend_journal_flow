@@ -64,11 +64,9 @@ def accessible_submissions_for(user):
     if (
         user.is_super_admin
         or user.is_editorial_manager
+        or user.is_editor
     ):
         return queryset
-
-    if user.is_editor:
-        return queryset.filter(Q(assigned_editor=user) | Q(author=user))
 
     return queryset.filter(author=user)
 
@@ -221,8 +219,14 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         )
 
     def get_permissions(self):
+        if self.action == 'published':
+            return [AllowAny()]
+            
         if self.action in ['list', 'create']:
             return [IsAuthenticated()]
+            
+        if self.action == 'publish':
+            return [IsEditorialManagerOrSuperAdmin()]
 
         return [IsAuthenticated(), IsOwnerOrEditorialStaff()]
 
@@ -254,6 +258,39 @@ class SubmissionViewSet(viewsets.ModelViewSet):
                 submission,
                 context={'request': request},
             ).data
+        )
+
+    @action(detail=False, methods=['get'])
+    def published(self, request):
+        submissions = Submission.objects.filter(
+            status=SubmissionStatus.PUBLISHED
+        ).prefetch_related(
+            'classifications',
+            'authors__contributor_roles',
+            'submission_files__file_type',
+        )
+        serializer = self.get_serializer(submissions, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def publish(self, request, pk=None):
+        submission = self.get_object()
+        
+        if submission.status != SubmissionStatus.ACCEPTED:
+            return Response(
+                {'detail': 'Only accepted submissions can be published.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        submission.status = SubmissionStatus.PUBLISHED
+        submission.save(update_fields=['status', 'updated_at'])
+
+        return Response(
+            SubmissionSerializer(
+                submission,
+                context={'request': request},
+            ).data,
+            status=status.HTTP_200_OK
         )
 
     @action(detail=True, methods=['post'])

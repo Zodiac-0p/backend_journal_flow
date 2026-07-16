@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background-color: #0077B6; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0;">Publication Manager</h1>
+    </div>
+    <div style="border: 1px solid #e0e0e0; border-top: none; padding: 30px; border-radius: 0 0 8px 8px;">
+        <h2 style="color: #0077B6;">{{ title }}</h2>
+        <p>Hello <strong>{{ user_full_name }}</strong>,</p>
+        
+        <div style="margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #0077B6; border-radius: 4px;">
+            {{ message|linebreaks }}
+            
+            {% if manuscript_reference %}
+            <p style="margin-top: 15px; font-weight: bold; color: #444;">
+                Reference Number: <span style="color: #0077B6;">{{ manuscript_reference }}</span>
+            </p>
+            {% endif %}
+            
+            {% if action_url %}
+            <div style="margin-top: 25px; text-align: center;">
+                <a href="{{ action_url }}" style="background-color: #0077B6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">View Article Details</a>
+            </div>
+            {% endif %}
+        </div>
+        
+        <p style="font-size: 14px; color: #666; margin-top: 20px;">Thank you for using Publication Manager.</p>
+    </div>
+    <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #777;">
+        &copy; 2026 Publication Manager. All rights reserved.
+    </div>
+</body>
+</html>

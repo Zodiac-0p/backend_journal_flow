@@ -18,7 +18,7 @@ from .utils import (
 )
 from user_notifications.utils import notify_user
 from .models import RoleChoice, Discipline
-from .permissions import IsEditorialManagerOrSuperAdmin
+from .permissions import IsEditorialManagerOrSuperAdmin, IsEditorialStaff
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -240,13 +240,19 @@ class UserListView(ListAPIView):
     ?role=super_admin
     """
     serializer_class = UserListSerializer
-    permission_classes = [IsEditorialManagerOrSuperAdmin]
+    permission_classes = [IsEditorialStaff]
 
     def get_queryset(self):
         queryset = User.objects.select_related(
             'role_choice'
         ).prefetch_related(
             'disciplines'
+        ).exclude(
+            is_editorial_manager=True
+        ).exclude(
+            is_super_admin=True
+        ).exclude(
+            is_superuser=True
         ).order_by('-created_at')
 
         role = self.request.query_params.get('role')
@@ -319,6 +325,14 @@ class PromoteToReviewerView(APIView):
         # Toggle reviewer status
         user.is_reviewer = not user.is_reviewer
         user.save()
+
+        notify_user(
+            user=user,
+            title='Role Changed',
+            message='Your account role has been updated by an administrator. You will be logged out shortly to apply the new permissions.',
+            notification_type='system',
+            send_email=False,
+        )
 
         return Response({
             "detail": (
