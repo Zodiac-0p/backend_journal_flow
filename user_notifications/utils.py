@@ -37,9 +37,9 @@ def notify_user(
     # Generate an action URL based on role if a submission is present
     action_url = None
     if submission:
-        if user.role in ['editor', 'editorial_manager', 'super_admin'] or user.is_editorial_manager or getattr(user, 'is_superuser', False):
+        if getattr(user, 'is_editor', False) or getattr(user, 'is_editorial_manager', False) or getattr(user, 'is_super_admin', False) or getattr(user, 'is_superuser', False):
             action_url = f"http://localhost:5173/manager/assign-reviewers/{submission.id}"
-        elif user.role == 'reviewer':
+        elif getattr(user, 'is_reviewer', False):
             action_url = f"http://localhost:5173/revision"
         else:
             action_url = f"http://localhost:5173/articles"
