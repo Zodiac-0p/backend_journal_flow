@@ -9,6 +9,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
+import dj_database_url
 # ------------------------------------------------------------------------------
 # Base Directory
 # ------------------------------------------------------------------------------
@@ -37,6 +38,9 @@ DEBUG = env_bool('DEBUG', True)
 
 # For development only
 ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', ['*'])
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 # JWT Configuration (Development)
 SIMPLE_JWT = {
@@ -88,6 +92,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -137,6 +142,13 @@ DATABASES = {
         },
     }
 }
+
+if os.getenv('DATABASE_URL'):
+    DATABASES['default'] = dj_database_url.config(
+        default=os.getenv('DATABASE_URL'),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 
 # ------------------------------------------------------------------------------
 # Custom User Model
