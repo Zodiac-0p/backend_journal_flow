@@ -189,7 +189,13 @@ REST_FRAMEWORK = {
 # CORS
 # ------------------------------------------------------------------------------
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True 
+# Instead of CORS_ALLOW_ALL_ORIGINS, we explicitly define origins for credentials
+CORS_ALLOWED_ORIGINS = [
+    "https://publication-manager-frontend.onrender.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+] 
 
 # ------------------------------------------------------------------------------
 # Password Validation
