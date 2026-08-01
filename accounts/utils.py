@@ -73,8 +73,9 @@ def generate_email_verification_otp_for_user(user):
 
 
 def send_email_verification_email(user, otp):
-    subject = 'Verify Your Email Address'
-    message = f'''
+    try:
+        subject = 'Verify Your Email Address'
+        message = f'''
 Hello {user.full_name},
 
 Welcome to Publication Manager.
@@ -90,31 +91,39 @@ If you did not create this account, please ignore this email.
 Publication Manager
 '''
 
-    notify_user(
-        user=user,
-        title='Verify Your Email',
-        message=(
-            'Please verify your email address using the OTP sent to your '
-            'email inbox.'
-        ),
-        notification_type='system',
-        send_email=False,
-    )
+        try:
+            notify_user(
+                user=user,
+                title='Verify Your Email',
+                message=(
+                    'Please verify your email address using the OTP sent to your '
+                    'email inbox.'
+                ),
+                notification_type='system',
+                send_email=False,
+            )
+        except Exception as e:
+            print(f"Notify user error: {e}")
 
-    html_message = render_to_string('emails/verify_email.html', {
-        'user_full_name': user.full_name or "User",
-        'otp': otp,
-        'expiry_minutes': settings.EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES,
-    })
+        try:
+            html_message = render_to_string('emails/verify_email.html', {
+                'user_full_name': user.full_name or "User",
+                'otp': otp,
+                'expiry_minutes': settings.EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES,
+            })
+        except Exception as e:
+            html_message = None
 
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        html_message=html_message,
-        fail_silently=True,
-    )
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=True,
+        )
+    except Exception as e:
+        print(f"Error sending email verification email: {e}")
 
 
 def generate_temporary_password(length=12):
