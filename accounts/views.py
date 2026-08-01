@@ -123,8 +123,8 @@ class LoginView(TokenObtainPairView):
                     key='refresh_token',
                     value=refresh_token,
                     httponly=True,
-                    secure=False,  # Set to False for local development
-                    samesite='Lax',
+                    secure=True,
+                    samesite='None',
                 )
                 del response.data['refresh']
         return response
@@ -155,8 +155,8 @@ class CookieTokenRefreshView(TokenRefreshView):
                 key='refresh_token',
                 value=new_refresh,
                 httponly=True,
-                secure=False,
-                samesite='Lax',
+                secure=True,
+                samesite='None',
             )
             del response.data['refresh']
 
@@ -426,7 +426,10 @@ class ForgotPasswordView(APIView):
                 ]
             )
 
-            send_reset_password_email(user, otp)
+            try:
+                send_reset_password_email(user, otp)
+            except Exception as e:
+                print(f"Error sending reset password email: {e}")
 
         return Response({
             'message': (
