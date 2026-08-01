@@ -10,9 +10,10 @@ from user_notifications.utils import notify_user
 
 
 def send_reset_password_email(user, otp):
-    subject = 'Reset Password OTP'
+    try:
+        subject = 'Reset Password OTP'
 
-    message = f'''
+        message = f'''
 Hello {user.full_name},
 
 Your OTP for resetting password is:
@@ -24,30 +25,38 @@ If you did not request this, please ignore this email.
 Publication Manager
 '''
 
-    notify_user(
-        user=user,
-        title='Password Reset Requested',
-        message=(
-            'A password reset OTP was requested for your Publication Manager '
-            'account. If this was not you, please ignore the email.'
-        ),
-        notification_type='system',
-        send_email=False,
-    )
+        try:
+            notify_user(
+                user=user,
+                title='Password Reset Requested',
+                message=(
+                    'A password reset OTP was requested for your Publication Manager '
+                    'account. If this was not you, please ignore the email.'
+                ),
+                notification_type='system',
+                send_email=False,
+            )
+        except Exception as e:
+            print(f"Notify user error: {e}")
 
-    html_message = render_to_string('emails/reset_password.html', {
-        'user_full_name': user.full_name or "User",
-        'otp': otp,
-    })
+        try:
+            html_message = render_to_string('emails/reset_password.html', {
+                'user_full_name': user.full_name or "User",
+                'otp': otp,
+            })
+        except Exception as e:
+            html_message = None
 
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        html_message=html_message,
-        fail_silently=True,
-    )
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=True,
+        )
+    except Exception as e:
+        print(f"Error sending reset password email: {e}")
 
 
 def generate_email_verification_otp_for_user(user):
