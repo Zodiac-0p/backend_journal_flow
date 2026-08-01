@@ -114,10 +114,11 @@ Publication Manager
         except Exception as e:
             html_message = None
 
+        sender = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'noreply@publicationmanager.com'
         send_mail(
             subject=subject,
             message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=sender,
             recipient_list=[user.email],
             html_message=html_message,
             fail_silently=True,
