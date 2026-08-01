@@ -1018,8 +1018,20 @@ class ResubmitSerializer(serializers.Serializer):
     def save(self, submission, user):
         with transaction.atomic():
             # 1. Locate and update the existing Manuscript file row in place
-            # file_type_id=12 corresponds to your 'Manuscript' configuration type
-            active_manuscript = submission.submission_files.filter(file_type_id=12).first()
+            file_type = (
+                SubmissionFileType.objects.filter(name__icontains='manuscript').first()
+                or SubmissionFileType.objects.first()
+            )
+            if not file_type:
+                file_type = SubmissionFileType.objects.create(
+                    name='Manuscript',
+                    is_required=True,
+                )
+            active_manuscript = (
+                submission.submission_files.filter(file_type=file_type).first()
+                if file_type
+                else submission.submission_files.first()
+            )
             uploaded_file = self.validated_data['manuscript_file']
 
             if active_manuscript:
@@ -1031,7 +1043,7 @@ class ResubmitSerializer(serializers.Serializer):
                 # Fallback safeguard: create the record if it didn't exist
                 SubmissionFile.objects.create(
                     submission=submission,
-                    file_type_id=12, 
+                    file_type=file_type,
                     file=uploaded_file,
                     original_filename=uploaded_file.name,
                     uploaded_by=user
@@ -1050,6 +1062,16 @@ class ResubmitSerializer(serializers.Serializer):
                 submission.latest_revision_notes = self.validated_data.get('revision_notes', '')
                 
             submission.save()
+
+            # Create version history record
+            next_version = submission.versions.count() + 1
+            SubmissionVersion.objects.create(
+                submission=submission,
+                version_number=next_version,
+                manuscript_file=uploaded_file,
+                revision_notes=self.validated_data.get('revision_notes', ''),
+                uploaded_by=user,
+            )
 
             # 4. Notify the assigned editor using your utilities layout
             editor = submission.assigned_editor

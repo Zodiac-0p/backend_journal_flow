@@ -484,6 +484,7 @@ class UserListSerializer(serializers.ModelSerializer):
             'country',
             'role_choice_name',
             'classifications',
+            'is_email_verified',
             'is_active',
             'created_at',
         ]

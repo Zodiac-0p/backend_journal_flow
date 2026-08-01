@@ -12,7 +12,13 @@ class IsOwnerOrEditorialStaff(BasePermission):
         if request.user.is_editor:
             return True
 
-        return obj.author == request.user
+        if obj.author == request.user:
+            return True
+
+        if obj.reviewer_assignments.filter(reviewer=request.user).exists():
+            return True
+
+        return False
 
 
 class IsEditorialManagerOrSuperAdmin(BasePermission):

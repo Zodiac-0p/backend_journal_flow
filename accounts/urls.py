@@ -17,6 +17,23 @@ from .views import (
     ResendVerificationEmailView,
     CookieTokenRefreshView,
     LogoutView,
+    SuperAdminLoginView,
+    SuperAdminStatsView,
+    SuperAdminUserListView,
+    SuperAdminToggleManagerView,
+    SuperAdminToggleUserActiveView,
+    SuperAdminUserDetailView,
+    SuperAdminCreateUserView,
+    SuperAdminNotificationListView,
+    SuperAdminNotificationDeleteView,
+    SuperAdminReviewerAssignmentDeleteView,
+    SuperAdminReviewReportDeleteView,
+    SuperAdminSubmissionUpdateView,
+    SuperAdminSubmissionAuthorUpdateView,
+    SuperAdminSubmissionFileUpdateView,
+    SuperAdminReviewerAssignmentUpdateView,
+    SuperAdminReviewReportUpdateView,
+    SuperAdminNotificationUpdateView,
 )
 
 # Router for Role Choices and Disciplines
@@ -66,6 +83,27 @@ urlpatterns = [
         ChangePasswordView.as_view(),
         name='change-password',
     ),
+
+    # ------------------------------------------------------------------
+    # Super Admin URLs (non-obvious paths, not linked anywhere in UI)
+    # ------------------------------------------------------------------
+    path('sa-auth/', SuperAdminLoginView.as_view(), name='super_admin_login'),
+    path('sa-stats/', SuperAdminStatsView.as_view(), name='super_admin_stats'),
+    path('sa-users/', SuperAdminUserListView.as_view(), name='super_admin_users'),
+    path('sa-users/create/', SuperAdminCreateUserView.as_view(), name='super_admin_create_user'),
+    path('sa-users/<int:user_id>/toggle-manager/', SuperAdminToggleManagerView.as_view(), name='super_admin_toggle_manager'),
+    path('sa-users/<int:user_id>/toggle-active/', SuperAdminToggleUserActiveView.as_view(), name='super_admin_toggle_active'),
+    path('sa-users/<int:user_id>/detail/', SuperAdminUserDetailView.as_view(), name='super_admin_user_detail'),
+    path('sa-notifications/', SuperAdminNotificationListView.as_view(), name='super_admin_notifications'),
+    path('sa-notifications/<int:pk>/', SuperAdminNotificationDeleteView.as_view(), name='super_admin_notification_delete'),
+    path('sa-reviewer-assignments/<int:pk>/', SuperAdminReviewerAssignmentDeleteView.as_view(), name='super_admin_reviewer_assignment_delete'),
+    path('sa-review-reports/<int:pk>/', SuperAdminReviewReportDeleteView.as_view(), name='super_admin_review_report_delete'),
+    path('sa-submissions/<int:pk>/edit/', SuperAdminSubmissionUpdateView.as_view(), name='super_admin_submission_update'),
+    path('sa-submission-authors/<int:pk>/edit/', SuperAdminSubmissionAuthorUpdateView.as_view(), name='super_admin_submission_author_update'),
+    path('sa-submission-files/<int:pk>/edit/', SuperAdminSubmissionFileUpdateView.as_view(), name='super_admin_submission_file_update'),
+    path('sa-reviewer-assignments/<int:pk>/edit/', SuperAdminReviewerAssignmentUpdateView.as_view(), name='super_admin_reviewer_assignment_update'),
+    path('sa-review-reports/<int:pk>/edit/', SuperAdminReviewReportUpdateView.as_view(), name='super_admin_review_report_update'),
+    path('sa-notifications/<int:pk>/edit/', SuperAdminNotificationUpdateView.as_view(), name='super_admin_notification_update'),
 ]
 
 # Append router-generated endpoints

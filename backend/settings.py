@@ -57,6 +57,9 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+# Super Admin Settings
+SUPER_ADMIN_SECRET_KEY = os.getenv('SUPER_ADMIN_SECRET_KEY', '')
+
 PASSWORD_RESET_OTP_EXPIRY_MINUTES = int(
     os.getenv('PASSWORD_RESET_OTP_EXPIRY_MINUTES', '10')
 )
@@ -182,6 +185,11 @@ REST_FRAMEWORK = {
             'EMAIL_VERIFICATION_RESEND_THROTTLE_RATE',
             '3/hour',
         ),
+        # Super Admin login — very strict (only 3 attempts per hour)
+        'super_admin_login': os.getenv(
+            'SUPER_ADMIN_LOGIN_THROTTLE_RATE',
+            '3/hour',
+        ),
     },
 }
 
@@ -189,12 +197,30 @@ REST_FRAMEWORK = {
 # CORS
 # ------------------------------------------------------------------------------
 CORS_ALLOW_CREDENTIALS = True
-# Instead of CORS_ALLOW_ALL_ORIGINS, we explicitly define origins for credentials
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://127\.0\.0\.1:\d+$",
+    r"^http://localhost:\d+$",
+    r"^http://192\.168\.\d+\.\d+:\d+$",
+    r"^http://172\.\d+\.\d+\.\d+:\d+$",
+    r"^http://10\.\d+\.\d+\.\d+:\d+$",
+]
+
 CORS_ALLOWED_ORIGINS = [
     "https://publication-manager-frontend.onrender.com",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://publication-manager-frontend.onrender.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://172.20.12.183:5173",
+    "http://172.20.12.183:8000",
 ] 
 
 # ------------------------------------------------------------------------------

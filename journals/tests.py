@@ -274,7 +274,7 @@ class SubmissionResubmitStatusTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         submission.refresh_from_db()
-        self.assertEqual(submission.status, SubmissionStatus.SUBMITTED)
+        self.assertEqual(submission.status, SubmissionStatus.UNDER_EDITOR_REVIEW)
         self.assertEqual(submission.versions.count(), 1)
         self.assertEqual(len(mail.outbox), 2)
         editor_email = next(
@@ -307,7 +307,7 @@ class SubmissionResubmitStatusTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         submission.refresh_from_db()
-        self.assertEqual(submission.status, SubmissionStatus.SUBMITTED)
+        self.assertEqual(submission.status, SubmissionStatus.UNDER_EDITOR_REVIEW)
         self.assertEqual(submission.versions.count(), 1)
 
 
@@ -522,7 +522,7 @@ class SubmissionEditorAutoAssignmentTests(APITestCase):
         self.assertEqual(submission.assigned_editor, least_loaded_editor)
         self.assertIsNotNone(submission.manuscript_reference)
         self.assertTrue(
-            submission.manuscript_reference.startswith('ERX-')
+            submission.manuscript_reference.startswith(Submission.REFERENCE_PREFIX)
         )
         self.assertEqual(
             submission.status,
@@ -1138,7 +1138,7 @@ class SubmissionReviewerAssignmentTests(APITestCase):
         self.assertTrue(
             Notification.objects.filter(
                 user=self.author,
-                title='Submission Status Updated',
+                title='Revision Required for Your Submission',
             ).exists()
         )
 
@@ -1170,7 +1170,7 @@ class SubmissionReviewerAssignmentTests(APITestCase):
         self.assertTrue(
             Notification.objects.filter(
                 user=self.author,
-                title='Submission Status Updated',
+                title='Article Assigned to Peer Reviewers',
             ).exists()
         )
 
@@ -1570,3 +1570,59 @@ class OverdueReviewerAssignmentNotificationTests(APITestCase):
             ).count(),
             1,
         )
+
+
+class SubmissionReviewerAccessAndStatusHistoryTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(
+            email='author_access@example.com',
+            username='author_access',
+            full_name='Author Access',
+            password='StrongPass123',
+        )
+        self.reviewer = User.objects.create_user(
+            email='reviewer_access@example.com',
+            username='reviewer_access',
+            full_name='Reviewer Access',
+            password='StrongPass123',
+            is_reviewer=True,
+        )
+        self.editor = User.objects.create_user(
+            email='editor_access@example.com',
+            username='editor_access',
+            full_name='Editor Access',
+            password='StrongPass123',
+            is_editor=True,
+        )
+        self.article_type = ArticleType.objects.create(name='Review Article')
+        self.submission = Submission.objects.create(
+            title='Test Access Submission',
+            author=self.author,
+            article_type=self.article_type,
+            status=SubmissionStatus.UNDER_PEER_REVIEW,
+        )
+        self.assignment = SubmissionReviewerAssignment.objects.create(
+            submission=self.submission,
+            reviewer=self.reviewer,
+            assigned_by=self.editor,
+            status=ReviewerAssignmentStatus.ACCEPTED,
+        )
+
+    def test_reviewer_can_access_submission_and_status_history(self):
+        self.client.force_authenticate(user=self.reviewer)
+
+        # 1. Test GET /api/journals/submissions/{id}/
+        response = self.client.get(
+            f'/api/journals/submissions/{self.submission.id}/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['title'], 'Test Access Submission')
+
+        # 2. Test GET /api/journals/submissions/{id}/status-history/
+        history_response = self.client.get(
+            f'/api/journals/submissions/{self.submission.id}/status-history/'
+        )
+        self.assertEqual(history_response.status_code, 200)
+        self.assertTrue(isinstance(history_response.data, list))
+        self.assertGreaterEqual(len(history_response.data), 1)
+        self.assertIn('new_status', history_response.data[0])

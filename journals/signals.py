@@ -50,6 +50,68 @@ def notify_author_on_submission_status_change(
             f'Your article {manuscript_label}{reference_suffix} was submitted '
             'successfully and is now under editor review.'
         )
+    elif (
+        previous_status in (
+            SubmissionStatus.MINOR_REVISION,
+            SubmissionStatus.MAJOR_REVISION,
+        )
+        and instance.status == SubmissionStatus.UNDER_EDITOR_REVIEW
+    ):
+        title = 'Revised Manuscript Submitted Successfully'
+        message = (
+            f'Your revised manuscript for {manuscript_label}{reference_suffix} '
+            'has been resubmitted successfully and is now under editor review.'
+        )
+    elif instance.status == SubmissionStatus.UNDER_PEER_REVIEW:
+        title = 'Article Assigned to Peer Reviewers'
+        message = (
+            f'Your manuscript {manuscript_label}{reference_suffix} has '
+            'completed initial editorial screening and has been assigned to '
+            'peer reviewers for formal evaluation.'
+        )
+    elif instance.status == SubmissionStatus.ACCEPTED:
+        title = 'Article Accepted for Publication'
+        message = (
+            'Congratulations! We are pleased to inform you that your manuscript '
+            f'{manuscript_label}{reference_suffix} has been ACCEPTED for '
+            'publication in Publication Manager.'
+        )
+    elif instance.status == SubmissionStatus.REJECTED:
+        title = 'Editorial Decision: Manuscript Not Accepted'
+        message = (
+            f'Thank you for submitting your manuscript {manuscript_label}'
+            f'{reference_suffix} to Publication Manager. After careful '
+            'consideration, we regret to inform you that your article has not '
+            'been accepted for publication.'
+        )
+    elif instance.status in (
+        SubmissionStatus.MINOR_REVISION,
+        SubmissionStatus.MAJOR_REVISION,
+    ):
+        revision_type = (
+            'Minor Revision'
+            if instance.status == SubmissionStatus.MINOR_REVISION
+            else 'Major Revision'
+        )
+        title = 'Revision Required for Your Submission'
+        message = (
+            f'An editorial decision of {revision_type} has been made for '
+            f'your manuscript {manuscript_label}{reference_suffix}. Please '
+            'review the feedback from the editorial team and submit your '
+            'revised manuscript.'
+        )
+    elif instance.status == SubmissionStatus.PUBLISHED:
+        title = 'Article Published Successfully'
+        message = (
+            'We are delighted to inform you that your manuscript '
+            f'{manuscript_label}{reference_suffix} has been formally published.'
+        )
+    elif instance.status == SubmissionStatus.WITHDRAWN:
+        title = 'Submission Withdrawn'
+        message = (
+            f'Your manuscript {manuscript_label}{reference_suffix} has '
+            'been marked as withdrawn.'
+        )
     else:
         status_label = instance.get_status_display()
         title = 'Submission Status Updated'

@@ -68,7 +68,9 @@ def accessible_submissions_for(user):
     ):
         return queryset
 
-    return queryset.filter(author=user)
+    return queryset.filter(
+        Q(author=user) | Q(reviewer_assignments__reviewer=user)
+    ).distinct()
 
 
 def is_editor_or_above(user):
@@ -336,6 +338,53 @@ class SubmissionViewSet(viewsets.ModelViewSet):
             ).data,
             status=status.HTTP_200_OK,
         )
+
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='status-history',
+    )
+    def status_history(self, request, pk=None):
+        submission = self.get_object()
+        history = []
+
+        def format_dt(dt):
+            return dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+
+        # 1. Initial creation
+        history.append({
+            'created_at': format_dt(submission.created_at),
+            'new_status': 'Draft',
+            'comment': 'Submission created',
+        })
+
+        # 2. Submitted for review
+        if submission.submitted_at:
+            history.append({
+                'created_at': format_dt(submission.submitted_at),
+                'new_status': 'Under Editor Review',
+                'comment': 'Manuscript submitted for editorial review',
+            })
+
+        # 3. Revision versions
+        for ver in submission.versions.all().order_by('created_at'):
+            history.append({
+                'created_at': format_dt(ver.created_at),
+                'new_status': f'Version {ver.version_number} Uploaded',
+                'comment': ver.revision_notes or f'Manuscript v{ver.version_number} resubmitted',
+            })
+
+        # 4. Current status milestone
+        if submission.status not in [SubmissionStatus.DRAFT, SubmissionStatus.UNDER_EDITOR_REVIEW]:
+            history.append({
+                'created_at': format_dt(submission.updated_at),
+                'new_status': submission.get_status_display(),
+                'comment': getattr(submission, 'latest_revision_notes', '') or '',
+            })
+
+        # Sort chronologically newest first
+        history.sort(key=lambda x: str(x['created_at']), reverse=True)
+        return Response(history)
 
     @action(
         detail=True,
