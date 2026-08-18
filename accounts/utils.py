@@ -13,11 +13,18 @@ from user_notifications.utils import notify_user
 
 def _send_mail_async(**kwargs):
     """Send an email in a background thread so the API responds instantly."""
+    recipient = kwargs.get('recipient_list', ['unknown'])
+    subject = kwargs.get('subject', 'unknown')
+
     def _worker():
         try:
-            send_mail(**kwargs)
+            print(f"[EMAIL-THREAD] Attempting to send '{subject}' to {recipient}")
+            print(f"[EMAIL-THREAD] Using HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, USER={settings.EMAIL_HOST_USER}")
+            result = send_mail(**kwargs)
+            print(f"[EMAIL-THREAD] SUCCESS: Sent '{subject}' to {recipient} (result={result})")
         except Exception as e:
-            print(f"[EMAIL-THREAD] Failed to send email: {e}")
+            print(f"[EMAIL-THREAD] FAILED to send '{subject}' to {recipient}")
+            print(f"[EMAIL-THREAD] Error type: {type(e).__name__}, Error: {e}")
     thread = threading.Thread(target=_worker, daemon=True)
     thread.start()
 
