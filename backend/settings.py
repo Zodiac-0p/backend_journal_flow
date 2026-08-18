@@ -142,6 +142,7 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
         'OPTIONS': {
             'timeout': int(os.getenv('SQLITE_TIMEOUT', '20')),
+            'CONN_MAX_AGE': 60,
         },
     }
 }
