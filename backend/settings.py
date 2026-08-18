@@ -142,7 +142,10 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
         'OPTIONS': {
             'timeout': int(os.getenv('SQLITE_TIMEOUT', '20')),
+<<<<<<< HEAD
             'CONN_MAX_AGE': 60,
+=======
+>>>>>>> 8a157b7 (Add sa-auth superadmin endpoint and CORS settings)
         },
     }
 }
