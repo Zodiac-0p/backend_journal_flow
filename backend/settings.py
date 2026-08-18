@@ -282,6 +282,7 @@ DEFAULT_FROM_EMAIL = (
     or EMAIL_HOST_USER
     or 'noreply@publicationmanager.com'
 )
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
 
 # ------------------------------------------------------------------------------
 # Default Auto Field
