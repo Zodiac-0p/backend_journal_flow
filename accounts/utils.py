@@ -53,7 +53,7 @@ Publication Manager
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             html_message=html_message,
-            fail_silently=False,
+            fail_silently=True,
         )
     except Exception as e:
         print(f"Error sending reset password email: {e}")
@@ -121,7 +121,7 @@ Publication Manager
             from_email=sender,
             recipient_list=[user.email],
             html_message=html_message,
-            fail_silently=False,
+            fail_silently=True,
         )
     except Exception as e:
         print(f"Error sending email verification email: {e}")
@@ -187,7 +187,7 @@ Publication Manager
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             html_message=html_message,
-            fail_silently=False,
+            fail_silently=True,
         )
         print(f"SUCCESS: Email sent to {user.email}")
     except Exception as e:

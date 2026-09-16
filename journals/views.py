@@ -929,7 +929,7 @@ class SendReviewCommentsToAuthorView(APIView):
             message=email_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[submission.author.email],
-            fail_silently=False,
+            fail_silently=True,
         )
 
         notify_user(
