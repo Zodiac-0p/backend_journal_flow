@@ -6,3 +6,5 @@ media/
 staticfiles/
 .vscode/
 .idea/
+.neon
+node_modules/
