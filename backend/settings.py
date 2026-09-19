@@ -94,6 +94,7 @@ INSTALLED_APPS = [
 # Middleware
 # ------------------------------------------------------------------------------
 MIDDLEWARE = [
+    'backend.middleware.RenderForwardedForMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
