@@ -115,14 +115,18 @@ Publication Manager
             html_message = None
 
         sender = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'noreply@publicationmanager.com'
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=sender,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=True,
-        )
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=sender,
+                recipient_list=[user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+        except Exception as e:
+            print(f"RESEND EMAIL ERROR: {e}")
+            raise e
     except Exception as e:
         print(f"Error sending email verification email: {e}")
 
