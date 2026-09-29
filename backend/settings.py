@@ -269,9 +269,15 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # ------------------------------------------------------------------------------
 # Email Configuration
 # ------------------------------------------------------------------------------
+BREVO_API_KEY = os.getenv('BREVO_API_KEY')
 RESEND_API_KEY = os.getenv('RESEND_API_KEY')
 
-if RESEND_API_KEY:
+if BREVO_API_KEY:
+    EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+    ANYMAIL = {
+        "BREVO_API_KEY": BREVO_API_KEY,
+    }
+elif RESEND_API_KEY:
     EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
     ANYMAIL = {
         "RESEND_API_KEY": RESEND_API_KEY,
