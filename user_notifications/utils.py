@@ -1,5 +1,5 @@
+from backend.email_utils import send_mail_async
 from django.conf import settings
-from django.core.mail import send_mail
 from django.template.loader import render_to_string
 
 from .models import Notification
@@ -59,7 +59,7 @@ def notify_user(
             'manuscript_reference': manuscript_reference,
             'action_url': action_url,
         })
-        send_mail(
+        send_mail_async(
             subject=title,
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,

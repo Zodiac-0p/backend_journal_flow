@@ -1,12 +1,13 @@
-from django.core.mail import send_mail
+import secrets
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.template.loader import render_to_string
-import secrets
 
 from user_notifications.utils import notify_user
+from backend.email_utils import send_mail_async
+
 
 
 def send_reset_password_email(user, otp):
@@ -46,7 +47,7 @@ Publication Manager
     except Exception as e:
         html_message = None
 
-    send_mail(
+    send_mail_async(
         subject=subject,
         message=message,
         from_email=settings.DEFAULT_FROM_EMAIL,
@@ -111,7 +112,7 @@ Publication Manager
         html_message = None
 
     sender = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'noreply@publicationmanager.com'
-    send_mail(
+    send_mail_async(
         subject=subject,
         message=message,
         from_email=sender,
@@ -174,20 +175,11 @@ Publication Manager
         'temporary_password': temporary_password,
     })
 
-    try:
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=True,
-        )
-        print(f"SUCCESS: Email sent to {user.email}")
-    except Exception as e:
-        print("=======================================")
-        print("EMAIL SENDING FAILED!")
-        print(f"Error: {str(e)}")
-        print("Please check your EMAIL_HOST_USER and EMAIL_HOST_PASSWORD in .env")
-        print("Make sure you have restarted the Django server after updating .env")
-        print("=======================================")
+    send_mail_async(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        html_message=html_message,
+        fail_silently=False,
+    )

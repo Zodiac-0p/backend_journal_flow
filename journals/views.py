@@ -7,9 +7,9 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django.core.mail import send_mail
 from django.conf import settings
 from django.db.models import Q
+from backend.email_utils import send_mail_async
 
 from user_notifications.utils import notify_user
 from .models import (
@@ -924,7 +924,7 @@ class SendReviewCommentsToAuthorView(APIView):
             'Publication Manager'
         )
 
-        send_mail(
+        send_mail_async(
             subject='Reviewer Comments for Your Submission',
             message=email_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
