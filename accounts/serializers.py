@@ -3,6 +3,7 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.password_validation import validate_password
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
@@ -154,6 +155,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         want_to_be_reviewer = validated_data.pop('want_to_be_reviewer', False)
         role_choice_id = validated_data.pop('role_choice_id', None)

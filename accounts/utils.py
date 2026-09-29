@@ -10,10 +10,9 @@ from user_notifications.utils import notify_user
 
 
 def send_reset_password_email(user, otp):
-    try:
-        subject = 'Reset Password OTP'
+    subject = 'Reset Password OTP'
 
-        message = f'''
+    message = f'''
 Hello {user.full_name},
 
 Your OTP for resetting password is:
@@ -25,38 +24,36 @@ If you did not request this, please ignore this email.
 Publication Manager
 '''
 
-        try:
-            notify_user(
-                user=user,
-                title='Password Reset Requested',
-                message=(
-                    'A password reset OTP was requested for your Publication Manager '
-                    'account. If this was not you, please ignore the email.'
-                ),
-                notification_type='system',
-                send_email=False,
-            )
-        except Exception as e:
-            print(f"Notify user error: {e}")
-
-        try:
-            html_message = render_to_string('emails/reset_password.html', {
-                'user_full_name': user.full_name or "User",
-                'otp': otp,
-            })
-        except Exception as e:
-            html_message = None
-
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=True,
+    try:
+        notify_user(
+            user=user,
+            title='Password Reset Requested',
+            message=(
+                'A password reset OTP was requested for your Publication Manager '
+                'account. If this was not you, please ignore the email.'
+            ),
+            notification_type='system',
+            send_email=False,
         )
     except Exception as e:
-        print(f"Error sending reset password email: {e}")
+        print(f"Notify user error: {e}")
+
+    try:
+        html_message = render_to_string('emails/reset_password.html', {
+            'user_full_name': user.full_name or "User",
+            'otp': otp,
+        })
+    except Exception as e:
+        html_message = None
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        html_message=html_message,
+        fail_silently=False,
+    )
 
 
 def generate_email_verification_otp_for_user(user):
@@ -73,9 +70,8 @@ def generate_email_verification_otp_for_user(user):
 
 
 def send_email_verification_email(user, otp):
-    try:
-        subject = 'Verify Your Email Address'
-        message = f'''
+    subject = 'Verify Your Email Address'
+    message = f'''
 Hello {user.full_name},
 
 Welcome to Publication Manager.
@@ -91,44 +87,38 @@ If you did not create this account, please ignore this email.
 Publication Manager
 '''
 
-        try:
-            notify_user(
-                user=user,
-                title='Verify Your Email',
-                message=(
-                    'Please verify your email address using the OTP sent to your '
-                    'email inbox.'
-                ),
-                notification_type='system',
-                send_email=False,
-            )
-        except Exception as e:
-            print(f"Notify user error: {e}")
-
-        try:
-            html_message = render_to_string('emails/verify_email.html', {
-                'user_full_name': user.full_name or "User",
-                'otp': otp,
-                'expiry_minutes': settings.EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES,
-            })
-        except Exception as e:
-            html_message = None
-
-        sender = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'noreply@publicationmanager.com'
-        try:
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email=sender,
-                recipient_list=[user.email],
-                html_message=html_message,
-                fail_silently=False,
-            )
-        except Exception as e:
-            print(f"RESEND EMAIL ERROR: {e}")
-            raise e
+    try:
+        notify_user(
+            user=user,
+            title='Verify Your Email',
+            message=(
+                'Please verify your email address using the OTP sent to your '
+                'email inbox.'
+            ),
+            notification_type='system',
+            send_email=False,
+        )
     except Exception as e:
-        print(f"Error sending email verification email: {e}")
+        print(f"Notify user error: {e}")
+
+    try:
+        html_message = render_to_string('emails/verify_email.html', {
+            'user_full_name': user.full_name or "User",
+            'otp': otp,
+            'expiry_minutes': settings.EMAIL_VERIFICATION_OTP_EXPIRY_MINUTES,
+        })
+    except Exception as e:
+        html_message = None
+
+    sender = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'noreply@publicationmanager.com'
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=sender,
+        recipient_list=[user.email],
+        html_message=html_message,
+        fail_silently=False,
+    )
 
 
 def generate_temporary_password(length=12):
